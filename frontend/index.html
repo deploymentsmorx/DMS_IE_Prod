@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>SmorX.ai DMS — Document Management System</title>
+  <link rel="icon" href="assets/smorx-logo-tight.png" type="image/png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/styles.css"/>
+  <link rel="stylesheet" href="css/document-version.css"/>
+  <script>
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem("docsearch_settings") || "{}");
+        var a = s.appearance || "dark";
+        var t = a === "system"
+          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : (a === "light" ? "light" : "dark");
+        document.documentElement.dataset.theme = t;
+        document.documentElement.dataset.accent = s.accentColor || "indigo";
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+
+<!-- Login -->
+<div class="overlay open" id="loginOverlay">
+  <div class="login-modal">
+    <div class="login-brand">
+      <div class="brand-lockup brand-lockup--login">
+        <div class="brand-wordmark" aria-label="SmorX.ai">
+          <span class="brand-s">S</span><span class="brand-mor">mor</span><span class="brand-x">X</span><span class="brand-ai"><span class="brand-dot">.</span><span class="brand-ai-a">a</span><span class="brand-ai-i">i</span></span>
+        </div>
+        <p class="brand-tagline">Transforming Vision into Intelligent Systems</p>
+      </div>
+      <div class="login-divider"></div>
+      <h1 class="login-app-title">Document Management System</h1>
+      <p class="login-app-sub">Search Engine · Document Version · AI Assistant</p>
+    </div>
+    <form id="loginForm" class="login-form" action="javascript:void(0)" method="post" onsubmit="event.preventDefault(); window.doLogin(event); return false;">
+      <div class="field">
+        <label for="loginUsername">Username</label>
+        <input id="loginUsername" name="username" type="text" placeholder="superadmin" autocomplete="username" required/>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="password" type="password" placeholder="Password" autocomplete="current-password" required/>
+      </div>
+      <div id="loginError" class="login-error" role="alert"></div>
+      <button type="button" class="login-submit-btn" id="loginBtn">Sign In</button>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var AUTH_KEY = "adse_auth_token";
+  var busy = false;
+
+  function showErr(msg) {
+    var el = document.getElementById("loginError");
+    if (el) el.textContent = msg || "";
+  }
+
+  function enterApp(data) {
+    try { localStorage.setItem(AUTH_KEY, data.token); } catch (e) {}
+    var overlay = document.getElementById("loginOverlay");
+    var shell = document.getElementById("appShell");
+    if (overlay) overlay.classList.remove("open");
+    if (shell) shell.classList.remove("hidden");
+    window.__adsePendingLogin = data;
+    window.dispatchEvent(new CustomEvent("adse-login-ok", { detail: data }));
+    if (typeof window.bootMainApp === "function") {
+      window.bootMainApp();
+    } else {
+      window.__needsLaunch = true;
+    }
+  }
+
+  window.doLogin = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (busy) return false;
+
+    var user = (document.getElementById("loginUsername") || {}).value;
+    user = (user || "").trim();
+    var pass = (document.getElementById("loginPassword") || {}).value || "";
+
+    if (!user || !pass) {
+      showErr("Please enter username and password.");
+      return false;
+    }
+
+    var btn = document.getElementById("loginBtn");
+    busy = true;
+    showErr("");
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+    if (btn) { btn.disabled = true; btn.textContent = "Signing in…"; }
+
+    fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user, password: pass }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || "Login failed");
+          enterApp(data);
+        });
+      })
+      .catch(function (err) {
+        showErr(err.message || "Login failed");
+      })
+      .finally(function () {
+        busy = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Sign In";
+        }
+      });
+
+    return false;
+  };
+
+  document.getElementById("loginBtn").addEventListener("click", window.doLogin);
+  document.getElementById("loginPassword").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") window.doLogin(e);
+  });
+})();
+</script>
+<script>
+(function () {
+  function callAfterBoot(name) {
+    return function () {
+      var args = arguments;
+      var boot = window.bootMainApp || window.launchApp;
+      if (typeof boot !== "function") {
+        console.warn("App still loading…");
+        return;
+      }
+      return Promise.resolve(boot()).then(function () {
+        var fn = window[name];
+        if (typeof fn === "function") return fn.apply(null, args);
+      });
+    };
+  }
+
+  ["setSource", "quickSearch", "sendMessage", "setCategory", "setType", "openModal", "closeModal", "syncDocs", "addDocument", "openConnectModalForSidebar", "clearSearchFilters", "openDocument", "openModuleAnalytics"].forEach(function (name) {
+    window[name] = callAfterBoot(name);
+  });
+
+  window.switchWorkspace = function () { /* tabs removed — search view only */ };
+})();
+</script>
+<script defer src="js/early-boot.js"></script>
+
+<div class="shell hidden" id="appShell">
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="topbar-left">
+        <div class="brand-lockup brand-lockup--header">
+          <div class="brand-wordmark" aria-label="SmorX.ai">
+            <span class="brand-s">S</span><span class="brand-mor">mor</span><span class="brand-x">X</span><span class="brand-ai"><span class="brand-dot">.</span><span class="brand-ai-a">a</span><span class="brand-ai-i">i</span></span>
+          </div>
+          <p class="brand-tagline">Transforming Vision into Intelligent Systems</p>
+        </div>
+      </div>
+      <div class="topbar-center">
+        <h1 class="app-title">Advance Directory Search Engine</h1>
+        <span class="app-subtitle">SmorX.ai · Enterprise Document Intelligence</span>
+      </div>
+      <div class="topbar-actions">
+        <div id="userBadge" class="user-badge"></div>
+        <div class="notif-wrap">
+          <button type="button" class="btn btn-ghost" id="notifBtn" title="Notifications">🔔 <span id="notifBadge" class="notif-badge"></span></button>
+          <div class="notif-panel" id="notifPanel"></div>
+        </div>
+        <span id="statusBadge" class="status-badge">Offline</span>
+        <button class="btn btn-ghost" id="openSettings" title="Settings">⚙ Settings</button>
+        <button class="btn" onclick="openModal()">+ Add</button>
+        <button class="btn btn-primary" onclick="syncDocs()">⟳ Sync</button>
+        <button class="btn btn-ghost" id="logoutBtn" title="Sign out">Logout</button>
+      </div>
+    </div>
+    <div class="topbar-search-row">
+      <div class="search-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="globalSearch" type="search" placeholder="AI Search — try: Find contracts signed in 2025" autocomplete="off"/>
+        <span class="search-kbd">⌘K</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="dms-modules">
+      <div class="dms-modules-label">DMS · Document Management</div>
+      <button type="button" class="dms-module-btn active" data-dms-module="search">Document Search Engine</button>
+      <button type="button" class="dms-module-btn" data-dms-module="version">Document Version</button>
+      <button type="button" class="dms-module-btn" data-dms-module="analytics">Feature Analytics</button>
+      <button type="button" class="dms-module-btn" data-dms-module="governance">Enterprise Governance</button>
+    </div>
+
+    <div id="searchSidebarExtras">
+    <div class="sidebar-brand">
+      <strong style="font-size:12px;color:var(--text2)">Workspace</strong>
+      <p>Unified search across Drive, OneDrive & local folders</p>
+    </div>
+    <div class="sidebar-group">
+      <h4>Data Sources</h4>
+      <button type="button" class="nav-btn nav-btn-connect" id="sidebarConnectBtn">
+        <span class="nav-icon">🔗</span> Connect a source
+      </button>
+      <p class="sidebar-hint" id="sidebarSourceHint">No sources connected yet. Connect a source from the sidebar to import documents.</p>
+      <div id="sidebarConnections" class="sidebar-connections dms-hidden"></div>
+      <button class="nav-btn active" data-src="all" onclick="setSource('all',this)">
+        <span class="src-dot" style="background:var(--text3)"></span> All Sources
+        <span class="pill" id="cnt-all">0</span>
+      </button>
+      <button class="nav-btn" data-src="google_drive" onclick="setSource('google_drive',this)">
+        <span class="src-dot" style="background:var(--gdrive)"></span> Google Drive
+        <span class="pill" id="cnt-google_drive">0</span>
+      </button>
+      <button class="nav-btn" data-src="onedrive" onclick="setSource('onedrive',this)">
+        <span class="src-dot" style="background:var(--onedrive)"></span> OneDrive
+        <span class="pill" id="cnt-onedrive">0</span>
+      </button>
+      <button class="nav-btn" data-src="local" onclick="setSource('local',this)">
+        <span class="src-dot" style="background:#94a3b8"></span> Local
+        <span class="pill" id="cnt-local">0</span>
+      </button>
+      <button class="nav-btn" data-src="smb" onclick="setSource('smb',this)">
+        <span class="src-dot" style="background:#a78bfa"></span> SMB / NAS
+        <span class="pill" id="cnt-smb">0</span>
+      </button>
+      <button class="nav-btn" data-src="dropbox" onclick="setSource('dropbox',this)">
+        <span class="src-dot" style="background:#0061ff"></span> Dropbox
+        <span class="pill" id="cnt-dropbox">0</span>
+      </button>
+      <button class="nav-btn" data-src="ftp" onclick="setSource('ftp',this)">
+        <span class="src-dot" style="background:#fb923c"></span> FTP/SFTP
+        <span class="pill" id="cnt-ftp">0</span>
+      </button>
+      <button class="nav-btn" data-src="sap" onclick="setSource('sap',this)">
+        <span class="src-dot" style="background:#0ea5e9"></span> SAP ERP
+        <span class="pill" id="cnt-sap">0</span>
+      </button>
+      <button class="nav-btn" data-src="teams" onclick="setSource('teams',this)">
+        <span class="src-dot" style="background:#6264a7"></span> Microsoft Teams
+        <span class="pill" id="cnt-teams">0</span>
+      </button>
+    </div>
+
+    <div class="sidebar-group">
+      <h4>Quick Find</h4>
+      <button class="nav-btn" onclick="quickSearch('inspection report')"><span class="nav-icon">🔍</span> Inspection</button>
+      <button class="nav-btn" onclick="quickSearch('CAD drawing')"><span class="nav-icon">📐</span> CAD / DWG</button>
+      <button class="nav-btn" onclick="quickSearch('invoice bill')"><span class="nav-icon">🧾</span> Invoices</button>
+      <button class="nav-btn" onclick="quickSearch('finance report')"><span class="nav-icon">💰</span> Finance</button>
+      <button class="nav-btn" onclick="quickSearch('hr policy')"><span class="nav-icon">👥</span> HR</button>
+      <button class="nav-btn" onclick="quickSearch('project')"><span class="nav-icon">📁</span> Project</button>
+      <button class="nav-btn" onclick="quickSearch('admin policy')"><span class="nav-icon">🏢</span> Admin</button>
+    </div>
+
+    <div class="sidebar-footer">
+      <strong>SmorX.ai DMS</strong>
+      <span>Search Engine · Version Control · AI</span>
+    </div>
+    </div>
+  </nav>
+
+  <main class="main" id="dmsSearchView">
+    <div class="page-header">
+      <div class="page-header-text">
+        <div class="breadcrumb">ADSE <span>/</span> <span id="pageBreadcrumb">Document Search</span></div>
+        <h1 id="pageTitle">Document Search</h1>
+        <p id="pageSubtitle">Advanced full-text search with match scoring across all departments</p>
+      </div>
+    </div>
+
+    <div class="kpi-strip" id="kpiStrip">
+      <div class="kpi-card">
+        <div class="kpi-icon docs">📄</div>
+        <div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-label">Total Documents</div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon dept">🏢</div>
+        <div><div class="kpi-value" id="kpiDepts">—</div><div class="kpi-label">Departments</div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon match">◎</div>
+        <div><div class="kpi-value" id="kpiMatch">—</div><div class="kpi-label">Top Match %</div></div>
+      </div>
+    </div>
+
+    <div id="ws-search" class="workspace-panel active">
+      <div class="content-card">
+      <div class="filter-bar">
+        <span class="filter-label">Department</span>
+        <button class="chip active" data-cat="all" onclick="setCategory('all',this)">All</button>
+        <button class="chip" data-cat="finance" onclick="setCategory('finance',this)">Finance</button>
+        <button class="chip" data-cat="hr" onclick="setCategory('hr',this)">HR</button>
+        <button class="chip" data-cat="project" onclick="setCategory('project',this)">Project</button>
+        <button class="chip" data-cat="admin" onclick="setCategory('admin',this)">Admin</button>
+        <button class="chip" data-cat="engineering" onclick="setCategory('engineering',this)">Engineering</button>
+        <span class="filter-label" style="margin-left:12px">Type</span>
+        <button class="chip active" data-type="all" onclick="setType('all',this)">All</button>
+        <button class="chip" data-type="pdf" onclick="setType('pdf',this)">PDF</button>
+        <button class="chip" data-type="dwg" onclick="setType('dwg',this)">CAD</button>
+        <button class="chip" data-type="xlsx" onclick="setType('xlsx',this)">Excel</button>
+        <span class="result-count" id="resultCount">—</span>
+        <div class="saved-search-wrap">
+          <button type="button" class="btn btn-sm" id="savedSearchToggle">Saved ▾</button>
+          <div class="saved-search-menu" id="savedSearchMenu"></div>
+        </div>
+        <button type="button" class="btn btn-sm" id="saveSearchBtn">Save search</button>
+        <label class="lang-select-wrap">
+          <span class="filter-label">Language</span>
+          <select id="searchLang"></select>
+        </label>
+        <span id="detectedLangBadge" class="analytics-status status-partial" hidden></span>
+        <button type="button" class="btn btn-sm analytics-link-btn" onclick="openModuleAnalytics()">Analytics</button>
+      </div>
+      <div class="similar-docs-panel" id="similarDocsPanel"></div>
+      <div class="doc-list" id="docList">
+        <div class="empty-state"><div class="empty-icon">⏳</div><h3>Loading documents…</h3><p>Connect a data source in the sidebar to import and search your files.</p></div>
+      </div>
+      </div>
+    </div>
+  </main>
+
+  <main class="main dms-hidden" id="dmsVersionView">
+    <div class="version-module-wrap" id="versionModuleRoot"></div>
+  </main>
+
+  <main class="main dms-hidden" id="dmsAnalyticsView">
+    <div class="version-module-wrap" id="analyticsModuleRoot"></div>
+  </main>
+
+  <main class="main dms-hidden" id="dmsGovernanceView">
+    <div class="version-module-wrap" id="governanceModuleRoot"></div>
+  </main>
+
+  <aside class="chat-panel">
+    <div class="chat-header">
+      <div class="ai-pulse"></div>
+      <div class="chat-header-text">
+        <h3 id="chatTitle">Your Document AI Assistant</h3>
+        <p id="chatSessionLabel">Search & chat with your documents</p>
+      </div>
+      <button class="btn btn-icon" id="chatNew" title="New chat">+</button>
+    </div>
+
+    <div class="chat-toolbar">
+      <div class="chat-history-wrap">
+        <button class="btn btn-sm" id="chatHistoryToggle">📜 History</button>
+        <div class="chat-history-dropdown" id="chatHistoryDropdown">
+          <div class="chat-history-header">Previous chats</div>
+          <div id="chatHistoryList"></div>
+        </div>
+      </div>
+      <button class="btn btn-sm" id="chatUndo" title="Undo" disabled>↩ Undo</button>
+      <button class="btn btn-sm" id="chatRedo" title="Redo" disabled>↪ Redo</button>
+      <button class="btn btn-sm" id="chatClear" title="Clear chat">Clear</button>
+      <button class="btn btn-sm" id="chatDelete" title="Delete chat">Delete</button>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="chat-footer">
+      <textarea id="chatInput" placeholder="Ask about your documents…" rows="1"></textarea>
+      <button class="send-btn" onclick="sendMessage()" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </aside>
+</div>
+
+<div class="overlay" id="addModal">
+  <div class="modal">
+    <h2>Add Document</h2>
+
+    <div class="field">
+      <label>Title *</label>
+      <input id="fTitle" type="text" placeholder="e.g. Pump Inspection Report — Site B"/>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea id="fDesc" placeholder="Brief summary of the document…"></textarea>
+    </div>
+    <div class="field">
+      <label>OCR / Full Text Content</label>
+      <textarea id="fContent" placeholder="Paste OCR text or extracted content for better search matching…"></textarea>
+    </div>
+    <div class="field">
+      <label>URL * (Drive / OneDrive share link)</label>
+      <input id="fUrl" type="url" placeholder="https://drive.google.com/file/d/…/view"/>
+    </div>
+    <div class="field">
+      <label>Source</label>
+      <select id="fSource">
+        <option value="google_drive">Google Drive</option>
+        <option value="onedrive">OneDrive</option>
+        <option value="manual">Manual</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <select id="fCategory">
+        <option value="finance">Finance</option>
+        <option value="hr">HR</option>
+        <option value="project">Project</option>
+        <option value="admin">Admin</option>
+        <option value="engineering">Engineering</option>
+        <option value="logistics">Logistics</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>File Type</label>
+      <select id="fType">
+        <option value="pdf">PDF</option>
+        <option value="dwg">CAD (DWG)</option>
+        <option value="docx">Word</option>
+        <option value="xlsx">Excel</option>
+        <option value="pptx">PowerPoint</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Tags (comma-separated)</label>
+      <input id="fTags" type="text" placeholder="inspection, invoice, cad, 2025"/>
+    </div>
+    <div class="field">
+      <label>File Size</label>
+      <input id="fSize" type="text" placeholder="e.g. 1.2 MB"/>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="addDocument()">Add Document</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Source Connect Modal -->
+<div class="overlay" id="sourceModal">
+  <div class="modal source-connect-modal">
+    <h2 id="sourceModalTitle">Connect Source</h2>
+    <input type="hidden" id="sourceModalType"/>
+    <p class="hint" id="sourceModalHelp"></p>
+    <div id="connectStep1">
+      <div id="sourceModalFields"></div>
+    </div>
+    <div id="connectStep2" class="hidden">
+      <div class="connect-otp-block">
+        <h4 class="connect-subtitle">Verification code</h4>
+        <p class="hint" id="sourceOtpHint">Enter the 6-digit code sent to your email address.</p>
+        <div class="field">
+          <label>OTP code *</label>
+          <input id="sourceOtpInput" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"/>
+        </div>
+        <button type="button" class="btn btn-sm" id="sourceResendOtpBtn">Resend code</button>
+      </div>
+    </div>
+    <div id="sourceModalResult"></div>
+    <div class="modal-footer">
+      <button class="btn hidden" type="button" id="sourceConnectBackBtn">← Back</button>
+      <button class="btn" id="closeSourceModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="sourceConnectBtn">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="overlay" id="settingsModal">
+  <div class="settings-modal">
+    <button class="settings-close" id="closeSettings">✕</button>
+    <div class="settings-layout">
+      <nav class="settings-nav">
+        <button class="settings-nav-btn active" data-section="general">⚙️ General</button>
+        <button class="settings-nav-btn" data-section="chat">💬 Chat</button>
+        <button class="settings-nav-btn" data-section="search">🔍 Search</button>
+        <button class="settings-nav-btn" data-section="data">🗄️ Data controls</button>
+      </nav>
+      <div class="settings-content" id="settingsContent"></div>
+    </div>
+  </div>
+</div>
+
+
+<script type="module" src="js/bootstrap.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</body>
+</html>

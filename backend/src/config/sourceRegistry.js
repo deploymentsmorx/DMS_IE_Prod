@@ -1,0 +1,127 @@
+const SOURCE_TYPES = {
+  google_drive: {
+    id: "google_drive",
+    label: "Google Drive",
+    icon: "gdrive",
+    category: "cloud",
+    docSource: "google_drive",
+    fields: [],
+    envKeys: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    help: "Sign in with Google — a verification code is sent to your Gmail inbox.",
+  },
+  onedrive: {
+    id: "onedrive",
+    label: "Microsoft OneDrive",
+    icon: "onedrive",
+    category: "cloud",
+    docSource: "onedrive",
+    fields: [],
+    envKeys: ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"],
+    help: "Scans your OneDrive folder on this PC automatically. Cloud sync works when Azure credentials are in .env.",
+  },
+  dropbox: {
+    id: "dropbox",
+    label: "Dropbox",
+    icon: "dropbox",
+    category: "cloud",
+    docSource: "dropbox",
+    fields: [],
+    envKeys: ["DROPBOX_ACCESS_TOKEN"],
+    help: "After email verification, your Dropbox folders are synced automatically.",
+  },
+  box: {
+    id: "box",
+    label: "Box",
+    icon: "box",
+    category: "cloud",
+    docSource: "box",
+    fields: [],
+    envKeys: ["BOX_ACCESS_TOKEN", "BOX_FOLDER_ID"],
+    help: "After email verification, Box documents are imported automatically.",
+  },
+  sharepoint: {
+    id: "sharepoint",
+    label: "SharePoint",
+    icon: "sharepoint",
+    category: "cloud",
+    docSource: "sharepoint",
+    fields: [],
+    envKeys: ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"],
+    help: "After email verification, SharePoint libraries are synced automatically.",
+  },
+  smb: {
+    id: "smb",
+    label: "Network Shared Drives (SMB)",
+    icon: "smb",
+    category: "network",
+    docSource: "smb",
+    fields: [],
+    help: "After email verification, accessible network shares are scanned automatically.",
+  },
+  nas: {
+    id: "nas",
+    label: "NAS Storage",
+    icon: "nas",
+    category: "network",
+    docSource: "nas",
+    fields: [],
+    help: "After email verification, NAS volumes are discovered and indexed automatically.",
+  },
+  local_directory: {
+    id: "local_directory",
+    label: "Local Directory Upload",
+    icon: "local",
+    category: "local",
+    docSource: "local",
+    fields: [],
+    help: "Pick a folder on your computer — files upload to the server (works on Render and localhost).",
+  },
+  ftp: {
+    id: "ftp",
+    label: "FTP Servers",
+    icon: "ftp",
+    category: "network",
+    docSource: "ftp",
+    fields: [],
+    help: "After email verification, FTP document folders are scanned automatically.",
+  },
+  sftp: {
+    id: "sftp",
+    label: "SFTP Servers",
+    icon: "sftp",
+    category: "network",
+    docSource: "sftp",
+    fields: [],
+    help: "After email verification, SFTP folders are scanned automatically.",
+  },
+  sap: {
+    id: "sap",
+    label: "SAP ERP",
+    icon: "sap",
+    category: "enterprise",
+    docSource: "sap",
+    fields: [],
+    envKeys: ["SAP_HOST", "SAP_CLIENT", "SAP_USER"],
+    help: "After email verification, SAP document archives are imported automatically.",
+  },
+  teams: {
+    id: "teams",
+    label: "Microsoft Teams",
+    icon: "teams",
+    category: "collaboration",
+    docSource: "teams",
+    fields: [],
+    envKeys: ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"],
+    help: "After email verification, Teams channel files are synced automatically.",
+  },
+};
+
+function getAllSourceTypes() {
+  return Object.values(SOURCE_TYPES);
+}
+
+function getSourceType(id) {
+  return SOURCE_TYPES[id] || null;
+}
+
+module.exports = { SOURCE_TYPES, getAllSourceTypes, getSourceType };

@@ -1,0 +1,37 @@
+{
+  "name": "docsearch-backend",
+  "version": "1.0.0",
+  "description": "Production document search API — NeonDB, Google Drive, OneDrive, GPT chat",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test:smtp": "node scripts/test-smtp.js",
+    "setup:gmail": "node scripts/setup-gmail-smtp.js",
+    "db:init": "node scripts/init-db.js",
+    "docs:pdf": "node scripts/generate-stakeholder-pdf.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "basic-ftp": "^5.0.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^173.0.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.10.1",
+    "openai": "^4.77.0",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.19.1",
+    "ssh2-sftp-client": "^11.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
