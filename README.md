@@ -55,6 +55,34 @@ Docuemts_Search_engine/
 └── README.md          # This file
 ```
 
+## Deploy on Render
+
+**Build command** (do **not** run `db:init` here — schema is created automatically when the server starts):
+
+```bash
+cd backend && npm install
+```
+
+**Start command:**
+
+```bash
+cd backend && npm start
+```
+
+### Required environment variables (Render → Environment)
+
+| Variable | Example / notes |
+|----------|-----------------|
+| `DATABASE_URL` | Full Neon URL — **not** `username:password` placeholders. From [Neon console](https://console.neon.tech) → Connection string → **Pooled** |
+| `AUTH_SECRET` | Long random string (Render can generate) |
+| `OPENAI_API_KEY` | Optional — AI chat/summaries |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional — Google Drive |
+| `GOOGLE_REDIRECT_URI` | `https://YOUR-SERVICE.onrender.com/api/sources/google/callback` |
+
+If build fails with `password authentication failed for user 'username'`, your `DATABASE_URL` on Render is still a placeholder — paste the real Neon connection string and redeploy.
+
+Optional: use [`render.yaml`](render.yaml) in this repo for one-click Blueprint deploy.
+
 ## Optional configuration
 
 Copy `backend/.env.example` to `backend/.env` (if present) and set:
