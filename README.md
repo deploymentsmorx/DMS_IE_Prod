@@ -73,13 +73,22 @@ cd backend && npm start
 
 | Variable | Example / notes |
 |----------|-----------------|
-| `DATABASE_URL` | Full Neon URL — **not** `username:password` placeholders. From [Neon console](https://console.neon.tech) → Connection string → **Pooled** |
+| `DATABASE_URL` | Full Neon URL from [Neon console](https://console.neon.tech) → **Pooled connection**. Must **not** contain literal `username` or `password` placeholders. |
 | `AUTH_SECRET` | Long random string (Render can generate) |
 | `OPENAI_API_KEY` | Optional — AI chat/summaries |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional — Google Drive |
 | `GOOGLE_REDIRECT_URI` | `https://YOUR-SERVICE.onrender.com/api/sources/google/callback` |
 
-If build fails with `password authentication failed for user 'username'`, your `DATABASE_URL` on Render is still a placeholder — paste the real Neon connection string and redeploy.
+**Render dashboard — copy these exactly:**
+
+| Field | Value |
+|-------|--------|
+| **Build Command** | `cd backend && npm install` |
+| **Start Command** | `cd backend && npm start` |
+
+Do **not** add `npm run db:init` to the build command. If you still have it, remove `&& npm run db:init` from Build Command in Render Settings and save.
+
+If build logs show `password authentication failed for user 'username'`, your `DATABASE_URL` on Render is still a placeholder — paste the real Neon string and redeploy.
 
 Optional: use [`render.yaml`](render.yaml) in this repo for one-click Blueprint deploy.
 
