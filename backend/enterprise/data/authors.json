@@ -1,0 +1,8 @@
+[
+  { "name": "Arjun",  "organization": "Acme Corp",       "colorIndex": 0 },
+  { "name": "Priya",  "organization": "Acme Corp",       "colorIndex": 1 },
+  { "name": "Rohan",  "organization": "Acme Corp",       "colorIndex": 2 },
+  { "name": "Sneha",  "organization": "Beta Partners",   "colorIndex": 3 },
+  { "name": "Dev",    "organization": "Beta Partners",   "colorIndex": 4 },
+  { "name": "Meera",  "organization": "Gamma Solutions", "colorIndex": 5 }
+]

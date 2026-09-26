@@ -45,7 +45,9 @@ async function onLoginSuccess(data) {
   setToken(data.token);
   showApp();
   updateUserBadge();
+  window.syncSuperAdminUi?.(currentUser);
   await launchMainApp();
+  window.syncSuperAdminUi?.(currentUser);
 }
 
 async function initAuth() {
@@ -94,7 +96,9 @@ async function initAuth() {
     currentUser = res.user;
     showApp();
     updateUserBadge();
+    window.syncSuperAdminUi?.(currentUser);
     await launchMainApp();
+    window.syncSuperAdminUi?.(currentUser);
   } catch {
     setToken(null);
     showLogin();

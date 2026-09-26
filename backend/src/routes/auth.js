@@ -5,11 +5,17 @@ const { extractToken, requireAuth } = require("../middleware/auth");
 const router = express.Router();
 
 router.post("/login", (req, res) => {
-  const { username, password } = req.body || {};
+  const body = req.body || {};
+  const username = String(body.username || body.email || "").trim();
+  const password = body.password;
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password are required" });
   }
-  const result = authService.login(username.trim(), password);
+  const result = authService.login(username, password, {
+    deviceId: body.deviceId || body.device_id,
+    hostName: body.hostName || body.host_name || body.hostname,
+    licenseKey: body.licenseKey || body.license_key,
+  });
   if (!result.ok) return res.status(401).json({ error: result.error });
   res.json({
     token: result.token,
@@ -32,6 +38,29 @@ router.get("/users", requireAuth, (req, res) => {
     return res.status(403).json({ error: "Super Admin access required" });
   }
   res.json({ users: authService.getUsers() });
+});
+
+router.post("/users", requireAuth, (req, res) => {
+  if (!authService.isSuperAdmin(req.user)) {
+    return res.status(403).json({ error: "Super Admin access required" });
+  }
+  const { username, displayName, role, password } = req.body || {};
+  const result = authService.createUser({ username, displayName, role, password });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.status(201).json({
+    user: result.user,
+    temporaryPassword: result.temporaryPassword,
+    message: `Login created. Share username "${result.user.username}" and temporary password with the user.`,
+  });
+});
+
+router.delete("/users/:id", requireAuth, (req, res) => {
+  if (!authService.isSuperAdmin(req.user)) {
+    return res.status(403).json({ error: "Super Admin access required" });
+  }
+  const result = authService.deleteUser(req.params.id);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ success: true });
 });
 
 module.exports = router;

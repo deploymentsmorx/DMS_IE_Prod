@@ -1,5 +1,8 @@
-const API = window.location.origin;
-const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+const ON_UNIFIED_APP = window.location.pathname.startsWith("/enterprise");
+const API = ON_UNIFIED_APP
+  ? `${window.location.origin}/enterprise-api`
+  : `${window.location.origin}/api`;
+const WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
 const COLOR_PALETTE = [
   { bg: '#1e1830', text: '#a899ff', dot: '#7c6dfa' },
@@ -25,7 +28,7 @@ async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
   if (state.token) headers['X-Session-Token'] = state.token;
-  const res = await fetch(`${API}/api${path}`, { ...options, headers });
+  const res = await fetch(`${API}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed (${res.status})`);

@@ -1,0 +1,7 @@
+[
+  { "id": 1, "email": "admin@docshare.local", "password": "admin123", "name": "Admin User", "role": "admin", "department": "IT", "groups": ["admins", "all-staff"] },
+  { "id": 2, "email": "arjun@acme.com", "password": "user123", "name": "Arjun", "role": "editor", "department": "Engineering", "groups": ["engineering", "all-staff"] },
+  { "id": 3, "email": "priya@acme.com", "password": "user123", "name": "Priya", "role": "editor", "department": "Product", "groups": ["product", "all-staff"] },
+  { "id": 4, "email": "sneha@beta.com", "password": "user123", "name": "Sneha", "role": "reviewer", "department": "HR", "groups": ["hr", "all-staff"] },
+  { "id": 5, "email": "viewer@docshare.local", "password": "view123", "name": "Viewer", "role": "viewer", "department": "Legal", "groups": ["legal"] }
+]

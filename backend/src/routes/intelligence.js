@@ -9,7 +9,7 @@ const { buildInsights } = require("../services/insightsService");
 const { filterAccessibleDocuments } = require("../services/sourceAccessService");
 const { AI_SEARCH_EXAMPLES, CHAT_EXAMPLES, ROLES } = require("../config/aiExamples");
 const path = require("path");
-const versionStore = require(path.join(__dirname, "../../backend/lib/store"));
+const versionStore = require(path.join(__dirname, "../../enterprise/lib/store"));
 
 router.get("/capabilities", (_req, res) => {
   res.json({

@@ -97,7 +97,7 @@ async function agenticSearch(query) {
         messages: [
           {
             role: "system",
-            content: "You are an agentic document search assistant. Synthesize multi-step search results into a clear answer with next actions. Reference specific documents and defects found.",
+            content: "You are an agentic document search assistant. Synthesize multi-step search results into a clear answer with next actions. Reference specific documents and defects found. Plain text only: use \"• \" bullets when listing; never use \"-\", \"*\", **, __, # headings, backticks, or markdown.",
           },
           {
             role: "user",
@@ -107,7 +107,15 @@ async function agenticSearch(query) {
         max_tokens: 600,
         temperature: 0.2,
       });
-      synthesis = res.choices[0]?.message?.content || "";
+      synthesis = String(res.choices[0]?.message?.content || "")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/__([^_]+)__/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/_([^_]+)_/g, "$1")
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/^[\t ]*[-*•]\s+/gm, "• ")
+        .trim();
     } catch (err) {
       synthesis = `Agentic search found ${searchResults.length} documents, ${graph.nodes.length} graph nodes, ${defects.length} defects.`;
     }

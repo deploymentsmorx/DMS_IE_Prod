@@ -1,0 +1,65 @@
+{
+  "name": "smorx-dms-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "author": "Ingenious Engineering",
+  "description": "SmorX.ai DMS Windows EXE — licensed customer client",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^34.5.8",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ai.smorx.dms.desktop",
+    "productName": "SmorX DMS",
+    "directories": {
+      "output": "dist-exe"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "ui/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "SmorX-DMS-Portable.${ext}"
+    },
+    "nsis": {
+      "artifactName": "SmorX-DMS-Setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "SmorX.ai DMS",
+      "uninstallDisplayName": "SmorX.ai DMS",
+      "include": "installer.nsh",
+      "deleteAppDataOnUninstall": false,
+      "unicode": true
+    }
+  }
+}

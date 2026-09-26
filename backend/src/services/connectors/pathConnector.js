@@ -12,9 +12,10 @@ async function scanPath(sourceType, folderPath, deptDefault) {
   const dept =
     deptDefault && deptDefault !== "auto" ? deptDefault : store.guessDepartment(resolved);
 
-  const files = walkDir(resolved);
+  const files = walkDir(resolved, [], { maxFiles: 5000 });
   const imported = [];
   const seen = new Set();
+  const localOnly = Boolean(sourceType === "local_directory");
 
   for (const file of files) {
     const key = file.toLowerCase();
@@ -25,6 +26,8 @@ async function scanPath(sourceType, folderPath, deptDefault) {
       department: store.guessDepartment(file) !== "other" ? store.guessDepartment(file) : dept,
       folderPath: resolved,
       source: sourceType === "local_directory" ? "local" : sourceType,
+      keepInPlace: localOnly,
+      localOnly,
       deferSave: true,
     });
     imported.push(doc);

@@ -120,26 +120,6 @@ const EXTRA_DEMO = {
       size: "310 KB",
     },
   ],
-  teams: [
-    {
-      title: "Teams — Project Kickoff Notes",
-      description: "Meeting notes and files shared in Microsoft Teams channel.",
-      content: "teams microsoft project kickoff meeting notes collaboration",
-      tags: ["teams", "project", "meeting"],
-      category: "project",
-      fileType: "docx",
-      size: "280 KB",
-    },
-    {
-      title: "Teams — Engineering Design Review",
-      description: "Design review pack shared via Teams channel.",
-      content: "teams engineering design review cad drawings collaboration",
-      tags: ["teams", "engineering", "review"],
-      category: "engineering",
-      fileType: "pdf",
-      size: "1.4 MB",
-    },
-  ],
 };
 
 function resolveDocSource(typeId) {

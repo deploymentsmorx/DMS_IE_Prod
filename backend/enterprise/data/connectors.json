@@ -1,0 +1,19 @@
+[
+  { "id": "local", "name": "Local Directory", "type": "filesystem", "status": "connected", "documents": 3 },
+  { "id": "network-drive", "name": "Network Drive", "type": "filesystem", "status": "ready", "documents": 0 },
+  { "id": "onedrive", "name": "OneDrive", "type": "cloud", "status": "ready", "documents": 0 },
+  { "id": "gdrive", "name": "Google Drive", "type": "cloud", "status": "ready", "documents": 0 },
+  { "id": "sharepoint", "name": "SharePoint", "type": "cloud", "status": "ready", "documents": 0 },
+  { "id": "dropbox", "name": "Dropbox", "type": "cloud", "status": "ready", "documents": 0 },
+  { "id": "box", "name": "Box", "type": "cloud", "status": "ready", "documents": 0 },
+  { "id": "slack", "name": "Slack", "type": "collab", "status": "ready", "documents": 0 },
+  { "id": "confluence", "name": "Confluence", "type": "collab", "status": "ready", "documents": 0 },
+  { "id": "jira", "name": "Jira", "type": "collab", "status": "ready", "documents": 0 },
+  { "id": "outlook", "name": "Outlook", "type": "email", "status": "ready", "documents": 0 },
+  { "id": "gmail", "name": "Gmail", "type": "email", "status": "ready", "documents": 0 },
+  { "id": "s3", "name": "Amazon S3", "type": "storage", "status": "ready", "documents": 0 },
+  { "id": "azure-blob", "name": "Azure Blob", "type": "storage", "status": "ready", "documents": 0 },
+  { "id": "postgres", "name": "PostgreSQL", "type": "database", "status": "ready", "documents": 0 },
+  { "id": "mysql", "name": "MySQL", "type": "database", "status": "ready", "documents": 0 },
+  { "id": "salesforce", "name": "Salesforce", "type": "crm", "status": "ready", "documents": 0 }
+]

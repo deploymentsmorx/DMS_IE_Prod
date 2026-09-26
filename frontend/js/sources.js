@@ -14,7 +14,6 @@ const SOURCE_ICONS = {
   ftp: "🌐",
   sftp: "🔐",
   sap: "🏭",
-  teams: "💬",
 };
 
 const SIDEBAR_TO_TYPE = {
@@ -25,7 +24,6 @@ const SIDEBAR_TO_TYPE = {
   dropbox: "dropbox",
   ftp: "ftp",
   sap: "sap",
-  teams: "teams",
 };
 
 const TYPE_TO_SIDEBAR = {
@@ -38,7 +36,6 @@ const TYPE_TO_SIDEBAR = {
   ftp: "ftp",
   sftp: "ftp",
   sap: "sap",
-  teams: "teams",
 };
 
 const AUTO_HIDDEN_FIELDS = new Set([
@@ -200,6 +197,7 @@ function renderSidebarConnections() {
         <div>
           <strong>${esc(c.label || c.type)}</strong>
           <small>${c.documentCount || 0} docs · ${esc(c.status || "connected")}</small>
+          ${c.lastError ? `<small class="conn-error">${esc(c.lastError)}</small>` : ""}
         </div>
         <button type="button" class="btn btn-sm btn-danger sidebar-disconnect" data-id="${esc(c.id)}" title="Disconnect">×</button>
       </div>`).join("")}`;
@@ -398,13 +396,33 @@ async function openConnectModal(typeId, options = {}) {
         </div>`;
   } else {
     const scanHint = isLocal
-      ? "Choose a folder on your computer. Files upload to the server — works on Render, production, and localhost."
+      ? ""
       : isOneDrive
       ? "Your OneDrive folder on this PC will be scanned."
       : esc(type.help);
-    authFields = `<div class="connect-auth-block">
-      <p class="hint">${scanHint} Click <strong>Connect</strong> to start — no email verification.</p>
-    </div>`;
+    authFields = isLocal
+      ? `<div class="connect-auth-block">
+          <p class="hint">Files stay on this PC. Search and chat use the local index.</p>
+          <div class="local-mode-options">
+            <label class="local-mode-option">
+              <input type="radio" name="localMode" value="folder" checked/>
+              <span>
+                <strong>Select specific folder</strong>
+                <small>Pick one folder from this computer</small>
+              </span>
+            </label>
+            <label class="local-mode-option">
+              <input type="radio" name="localMode" value="system"/>
+              <span>
+                <strong>Sync all local system data</strong>
+                <small>Index Documents, Desktop, Downloads, Pictures, Videos, Music on this PC</small>
+              </span>
+            </label>
+          </div>
+        </div>`
+      : `<div class="connect-auth-block">
+          <p class="hint">${scanHint} Click <strong>Connect</strong> to start — no email verification.</p>
+        </div>`;
   }
 
   const typeFields = (type.fields || [])
@@ -429,7 +447,9 @@ async function openConnectModal(typeId, options = {}) {
     ? (googleReady
       ? "Sign in with Google — OTP goes to your Gmail inbox."
       : "Google OAuth must be configured before connecting Drive.")
-    : "";
+    : isLocal
+      ? "Choose one folder, or sync local system folders on this PC."
+      : "";
 
   document.getElementById("sourceOtpInput").value = "";
   connectStep = 1;
@@ -440,9 +460,25 @@ async function openConnectModal(typeId, options = {}) {
     connectBtn.textContent = connectUsesGoogle
       ? "Sign in with Google"
       : typeId === "local_directory"
-        ? "Choose folder & connect"
+        ? "Connect"
         : "Connect";
   }
+
+  if (isLocal) {
+    const syncLabel = () => {
+      const mode = document.querySelector('input[name="localMode"]:checked')?.value || "folder";
+      if (connectBtn) {
+        connectBtn.textContent = mode === "system"
+          ? "Sync all local data"
+          : "Choose folder…";
+      }
+    };
+    document.querySelectorAll('input[name="localMode"]').forEach((el) => {
+      el.addEventListener("change", syncLabel);
+    });
+    syncLabel();
+  }
+
   document.getElementById("sourceModal").classList.add("open");
 }
 
@@ -653,12 +689,39 @@ async function submitConnect() {
     const typeDef = sourceTypes.find((t) => t.id === resolvedType);
 
     if (resolvedType === "local_directory") {
+      const localMode = document.querySelector('input[name="localMode"]:checked')?.value || "folder";
+      if (localMode === "system") {
+        btn.textContent = "Indexing local files…";
+        const res = await api("/sources/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          timeout: CONNECT_TIMEOUT_MS,
+          body: JSON.stringify({
+            type: "local_directory",
+            label: "Local System Data",
+            config: {
+              mode: "system",
+              scanAll: true,
+              localOnly: true,
+              department: config.department || "auto",
+            },
+          }),
+        });
+        closeSourceModal();
+        showSourceToast(res.sync?.message || "Local system indexing started…");
+        if (res.sync?.background) startBackgroundSyncWatch();
+        await loadSourcesHub();
+        if (window.render) await window.render();
+        if (window.setSourceFilter) window.setSourceFilter("local");
+        return;
+      }
+
       btn.textContent = "Choose folder…";
       const files = await pickLocalFolder();
       btn.textContent = `Uploading ${files.length} file(s)…`;
       const res = await uploadLocalFolderFiles(files, {
         department: config.department || "auto",
-        label: typeDef?.label || "Local Directory",
+        label: typeDef?.label || "Local Folder",
       });
       await finishLocalFolderConnect(res, resolvedType);
       return;
@@ -709,7 +772,8 @@ async function submitConnect() {
     if (connectUsesGoogle) {
       btn.textContent = connectStep === 1 ? "Sign in with Google" : "Verify & connect";
     } else if (modalType === "local_directory") {
-      btn.textContent = "Choose folder & connect";
+      const mode = document.querySelector('input[name="localMode"]:checked')?.value || "folder";
+      btn.textContent = mode === "system" ? "Sync all local data" : "Choose folder…";
     } else {
       btn.textContent = "Connect";
     }
@@ -772,15 +836,8 @@ async function syncAllSources() {
 
 function updateSidebarSources(bySource, connectedCount = connections.length) {
   const map = {
-    google_drive: "cnt-google_drive",
     onedrive: "cnt-onedrive",
     local: "cnt-local",
-    smb: "cnt-smb",
-    ftp: "cnt-ftp",
-    sftp: "cnt-ftp",
-    dropbox: "cnt-dropbox",
-    sap: "cnt-sap",
-    teams: "cnt-teams",
   };
 
   if (!connectedCount) {

@@ -1,0 +1,243 @@
+{
+  "name": "DocShare Enterprise",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "documents",
+      "title": "Documents",
+      "tier": "basic",
+      "description": "Store, organize, preview, and version documents",
+      "features": [
+        "Upload files",
+        "Folder structure",
+        "Drag & drop upload",
+        "Bulk upload",
+        "File preview",
+        "Document version history",
+        "Rollback previous versions",
+        "Check-in / Check-out"
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Search",
+      "tier": "basic",
+      "description": "One search hub for all repositories and AI queries",
+      "features": [
+        "Search by file name",
+        "Search by metadata",
+        "Full-text search",
+        "OCR search for scanned PDFs",
+        "Enterprise cross-repository search",
+        "Natural language queries",
+        "Semantic search",
+        "Vector search",
+        "RAG search",
+        "Hybrid search",
+        "Knowledge graph search",
+        "Voice search"
+      ]
+    },
+    {
+      "id": "users",
+      "title": "Users & Access",
+      "tier": "basic",
+      "description": "Authentication and access control",
+      "features": [
+        "Login",
+        "Role-based access",
+        "User groups",
+        "Department-wise access"
+      ]
+    },
+    {
+      "id": "sharing",
+      "title": "Sharing",
+      "tier": "basic",
+      "description": "Share documents internally and externally",
+      "features": [
+        "Internal sharing",
+        "External sharing",
+        "Expiring links",
+        "Password-protected links"
+      ]
+    },
+    {
+      "id": "security",
+      "title": "Security",
+      "tier": "basic",
+      "description": "Encryption, audit, and activity monitoring",
+      "features": [
+        "Encryption at rest",
+        "Encryption in transit",
+        "Audit logs",
+        "Activity tracking"
+      ]
+    },
+    {
+      "id": "metadata",
+      "title": "Metadata",
+      "tier": "intermediate",
+      "description": "Tags, categories, and custom fields",
+      "features": [
+        "Custom metadata fields",
+        "Auto-tagging",
+        "Categories",
+        "Labels"
+      ]
+    },
+    {
+      "id": "ocr",
+      "title": "OCR & Extraction",
+      "tier": "intermediate",
+      "description": "Extract text and structured data from documents",
+      "features": [
+        "OCR for scanned PDFs",
+        "Invoice extraction",
+        "Form extraction",
+        "Table extraction"
+      ]
+    },
+    {
+      "id": "workflow",
+      "title": "Workflow",
+      "tier": "intermediate",
+      "description": "Approvals, reviews, and notifications",
+      "features": [
+        "Approval workflows",
+        "Review workflows",
+        "Escalation rules",
+        "Notifications"
+      ]
+    },
+    {
+      "id": "collaboration",
+      "title": "Collaboration",
+      "tier": "intermediate",
+      "description": "Work together on documents",
+      "features": [
+        "Comments",
+        "Mentions",
+        "Annotations",
+        "Co-authoring"
+      ]
+    },
+    {
+      "id": "integrations",
+      "title": "Integrations",
+      "tier": "intermediate",
+      "description": "Enterprise identity and SSO",
+      "features": [
+        "Active Directory",
+        "LDAP",
+        "SSO",
+        "OAuth"
+      ]
+    },
+    {
+      "id": "connectors",
+      "title": "Source Connectors",
+      "tier": "advanced",
+      "description": "Connect external repositories and systems",
+      "features": [
+        "Local Directory", "Network Drive", "NAS Storage",
+        "OneDrive", "Google Drive", "SharePoint", "Dropbox", "Box",
+        "Slack", "Confluence", "Jira",
+        "Outlook", "Gmail", "S3", "Azure Blob", "Snowflake",
+        "PostgreSQL", "MySQL", "SQL Server", "Oracle DB", "MongoDB",
+        "Elasticsearch", "SAP", "Salesforce", "ServiceNow"
+      ]
+    },
+    {
+      "id": "ai-assistant",
+      "title": "AI Assistant",
+      "tier": "advanced",
+      "description": "Chat with your documents",
+      "features": [
+        "Ask questions",
+        "Summarize documents",
+        "Compare documents",
+        "Extract information",
+        "Generate reports",
+        "Voice-to-document query"
+      ]
+    },
+    {
+      "id": "classification",
+      "title": "Classification",
+      "tier": "advanced",
+      "description": "Auto-detect document types",
+      "features": [
+        "Invoice", "Contract", "Drawing", "SOP",
+        "Inspection Report", "Purchase Order", "Resume",
+        "Technical Specification"
+      ]
+    },
+    {
+      "id": "compliance",
+      "title": "Compliance & Records",
+      "tier": "advanced",
+      "description": "Regulatory compliance and records management",
+      "features": [
+        "ISO 9001", "FDA", "HIPAA", "GDPR",
+        "Audit trail", "Retention policies", "Legal hold",
+        "Auto archival", "Retention schedules", "Auto deletion",
+        "Compliance tracking"
+      ]
+    },
+    {
+      "id": "governance",
+      "title": "Data Governance",
+      "tier": "advanced",
+      "description": "Sensitive data and access governance",
+      "features": [
+        "Sensitive data detection",
+        "PII detection",
+        "Data classification",
+        "Access governance"
+      ]
+    },
+    {
+      "id": "ai-understanding",
+      "title": "AI Understanding",
+      "tier": "modern",
+      "description": "Deep document and multimodal AI",
+      "features": [
+        "Document summarization",
+        "Key information extraction",
+        "Risk detection",
+        "Contract analysis",
+        "PDF understanding",
+        "Image understanding",
+        "Drawing understanding",
+        "Handwriting recognition"
+      ]
+    },
+    {
+      "id": "agents",
+      "title": "AI Agents",
+      "tier": "modern",
+      "description": "Automated document agents",
+      "features": [
+        "Document ingestion agent",
+        "Metadata generation agent",
+        "Compliance checking agent",
+        "Report generation agent",
+        "Approval routing agent"
+      ]
+    },
+    {
+      "id": "analytics",
+      "title": "Analytics",
+      "tier": "modern",
+      "description": "Platform usage and insights dashboard",
+      "features": [
+        "Document statistics",
+        "User activity metrics",
+        "Search analytics",
+        "Compliance dashboard",
+        "Connector health"
+      ]
+    }
+  ]
+}

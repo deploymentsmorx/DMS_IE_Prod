@@ -110,17 +110,6 @@ async function syncSharePoint(config) {
   };
 }
 
-async function syncTeams(config) {
-  if (!process.env.AZURE_CLIENT_ID && !config.tenantId) {
-    throw new Error("Configure AZURE_CLIENT_ID or provide tenantId for Teams");
-  }
-  return {
-    imported: 0,
-    message: `Teams connector ready for team ${config.teamId || "channel"}`,
-    config,
-  };
-}
-
 async function syncSap(config) {
   if (!config.systemId && !process.env.SAP_HOST) {
     throw new Error("Provide SAP systemId and host, or set SAP_HOST in .env");
@@ -138,7 +127,6 @@ const CLOUD_SYNC = {
   dropbox: syncDropbox,
   box: syncBox,
   sharepoint: syncSharePoint,
-  teams: syncTeams,
   sap: syncSap,
 };
 

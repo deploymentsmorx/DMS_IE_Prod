@@ -14,7 +14,6 @@ const DOC_SOURCE_TO_CONN = {
   ftp: "ftp",
   sftp: "sftp",
   sap: "sap",
-  teams: "teams",
 };
 
 function getConnectedTypes() {
@@ -22,6 +21,7 @@ function getConnectedTypes() {
 }
 
 function isDocumentAccessible(doc) {
+  if (doc?.source === "enterprise") return true;
   if (isDemoDocument(doc)) return false;
   const connected = getConnectedTypes();
   const connType = DOC_SOURCE_TO_CONN[doc.source];

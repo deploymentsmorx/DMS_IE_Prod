@@ -6,6 +6,7 @@ import { initSearchLanguageSelect, languageLabel } from "./languages.js";
 import { initSources } from "./sources.js";
 import { initDmsNavigation } from "./modules/dms-nav.js";
 import { getCurrentUser } from "./auth.js";
+import { syncSuperAdminUi } from "./superAdmin.js";
 import { initNotifications } from "./modules/notifications.js";
 import { initSavedSearches, saveCurrentSearch as persistSavedSearch } from "./modules/saved-searches.js";
 import { initGlobalAutocomplete } from "./autocomplete.js";
@@ -37,6 +38,7 @@ const SRC_LABEL = {
   sftp: "SFTP",
   sap: "SAP ERP",
   teams: "Microsoft Teams",
+  enterprise: "Library",
 };
 const CAT_LABEL = {
   engineering: "Engineering",
@@ -185,7 +187,7 @@ async function render() {
           <div class="empty-icon">${needsConnect ? "🔌" : "🔍"}</div>
           <h3>${needsConnect ? "Connect a data source first" : state.query ? "No matches for your search" : "No documents found"}</h3>
           <p>${needsConnect
-            ? "Documents appear only after you connect a source (Google Drive, Local folder, Dropbox, etc.). Click <strong>Connect a source</strong> in the sidebar."
+            ? "Documents appear only after you connect a source (OneDrive or Local folder). Click <strong>Connect a source</strong> in the sidebar."
             : state.query
               ? `Nothing matched "<strong>${esc(state.query)}</strong>". Try fewer keywords or check spelling.`
               : "Try finance, invoice, inspection, CAD, HR, or connect a folder in Data Sources."}</p>
@@ -271,7 +273,7 @@ async function updateSidebar() {
   if (stats.requiresConnection || !window.hasConnectedSources?.()) {
     const elAll = document.getElementById("cnt-all");
     if (elAll) elAll.textContent = "0";
-    ["google_drive", "onedrive", "local", "smb", "dropbox", "ftp", "sap", "teams", "manual"].forEach((s) => {
+    ["onedrive", "local", "manual"].forEach((s) => {
       const el = document.getElementById(`cnt-${s}`);
       if (el) el.textContent = "0";
     });
@@ -279,7 +281,7 @@ async function updateSidebar() {
   }
   const elAll = document.getElementById("cnt-all");
   if (elAll) elAll.textContent = stats.total ?? 0;
-  ["google_drive", "onedrive", "local", "smb", "dropbox", "ftp", "sap", "teams", "manual"].forEach((s) => {
+  ["onedrive", "local", "manual"].forEach((s) => {
     const el = document.getElementById(`cnt-${s}`);
     if (el) el.textContent = stats.bySource?.[s] || 0;
   });
@@ -292,9 +294,7 @@ function setSource(src, btn) {
 
   if (src !== "all" && window.shouldPromptSourceConnect?.(src)) {
     window.openConnectModalForSidebar?.(src);
-    const msg = src === "google_drive"
-      ? "Sign in with Google to connect Drive."
-      : `Connect ${SRC_LABEL[src] || src} to import your documents.`;
+    const msg = `Connect ${SRC_LABEL[src] || src} to import your documents.`;
     showToast(msg);
   }
 
@@ -521,8 +521,8 @@ function renderChatUI() {
   const sessionLabel = document.getElementById("chatSessionLabel");
   if (sessionLabel) {
     sessionLabel.textContent = session?.title && session.title !== "New Chat"
-      ? `${session.title} · Search & chat with your documents`
-      : "Search & chat with your documents";
+      ? `${session.title} · Chat with your documents`
+      : "Chat with one file or several. Give a file name as a clue, or pick files below.";
   }
   renderChatHistoryDropdown();
 
@@ -611,7 +611,7 @@ function renderRefCards(refs) {
       <div class="chat-doc">
         <div class="chat-doc-title">
           ${ICON[doc.fileType] || "📁"} ${esc(doc.title)}
-          <span class="match-pct-sm">${doc.matchPercent || 0}%</span>
+          <span class="match-pct-sm">${doc.scoped ? "This file" : `${doc.matchPercent || 0}%`}</span>
         </div>
         <div class="chat-doc-desc">${esc(doc.description)}</div>
         <div class="chat-doc-meta">
@@ -625,6 +625,56 @@ function renderRefCards(refs) {
       </div>`;
   });
   return html;
+}
+
+const chatFileIds = new Set();
+let followUpFileIds = [];
+
+function resetFollowUpFiles() {
+  followUpFileIds = [];
+}
+
+function updateChatFilesLabel(docs) {
+  const label = document.getElementById("chatFilesLabel");
+  if (!label) return;
+  if (!chatFileIds.size) {
+    label.textContent = "Using a file name in your question";
+    return;
+  }
+  const names = docs
+    .filter((doc) => chatFileIds.has(String(doc.id)))
+    .map((doc) => doc.title);
+  label.textContent = names.length ? `Only: ${names.join(", ")}` : `${chatFileIds.size} file(s) selected`;
+}
+
+async function loadChatFilePicker() {
+  const menu = document.getElementById("chatFilesMenu");
+  if (!menu) return;
+  let docs = [];
+  try {
+    const data = await api("/documents?limit=100");
+    docs = data.results || [];
+  } catch {
+    docs = [];
+  }
+  if (!docs.length) {
+    menu.innerHTML = `<p class="hint">No files are in the DMS yet.</p>`;
+    updateChatFilesLabel([]);
+    return;
+  }
+  menu.innerHTML = docs.map((doc) => `
+    <label>
+      <input type="checkbox" value="${esc(doc.id)}" ${chatFileIds.has(String(doc.id)) ? "checked" : ""}/>
+      <span>${esc(doc.title)}</span>
+    </label>`).join("");
+  menu.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) chatFileIds.add(input.value);
+      else chatFileIds.delete(input.value);
+      updateChatFilesLabel(docs);
+    });
+  });
+  updateChatFilesLabel(docs);
 }
 
 async function sendMessage() {
@@ -645,10 +695,18 @@ async function sendMessage() {
     const data = await api("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, history: history.slice(-8) }),
+      body: JSON.stringify({
+        message: text,
+        history: history.slice(-8),
+        documentIds: [...chatFileIds],
+        followUpIds: chatFileIds.size ? [] : followUpFileIds,
+      }),
     });
     reply = data.reply || "";
     refs = data.references || [];
+    if (!chatFileIds.size && refs.length) {
+      followUpFileIds = refs.map((doc) => String(doc.id)).filter(Boolean);
+    }
   } catch {
     const old = state.query;
     state.query = text;
@@ -666,9 +724,6 @@ async function sendMessage() {
   hideTyping();
   const html = reply.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>") + renderRefCards(refs);
   aiMsg(html);
-
-  document.getElementById("globalSearch").value = text;
-  runSearch(text);
 }
 
 async function checkHealth() {
@@ -688,22 +743,34 @@ async function checkHealth() {
   }
 }
 
-function startNewChat() {
-  chat.newChat();
-  renderChatUI();
-  showToast("New chat started");
-}
-
 function clearCurrentChat() {
+  resetFollowUpFiles();
+  chatFileIds.clear();
+  updateChatFilesLabel([]);
   chat.clearActiveChat();
+  const box = document.getElementById("messages");
+  if (box) box.innerHTML = "";
   renderChatUI();
   showToast("Chat cleared");
 }
 
 function deleteCurrentChat() {
+  if (!window.confirm("Delete this chat permanently?")) return;
+  resetFollowUpFiles();
+  chatFileIds.clear();
+  updateChatFilesLabel([]);
   chat.deleteActiveChat();
   renderChatUI();
   showToast("Chat deleted");
+}
+
+function startNewChat() {
+  resetFollowUpFiles();
+  chatFileIds.clear();
+  updateChatFilesLabel([]);
+  chat.newChat();
+  renderChatUI();
+  showToast("New chat started");
 }
 
 function toggleChatHistory() {
@@ -758,6 +825,16 @@ export async function bootstrapApp() {
       render();
     };
 
+    document.getElementById("headerSearchBtn")?.addEventListener("click", () => {
+      document.querySelector(".topbar")?.classList.add("search-open");
+      if (typeof window.switchDmsModule === "function") window.switchDmsModule("search");
+      const input = document.getElementById("globalSearch");
+      if (input) {
+        input.focus();
+        input.scrollIntoView({ block: "nearest" });
+      }
+    });
+
     document.getElementById("globalSearch")?.addEventListener("input", (e) => {
       runSearch(e.target.value);
     });
@@ -786,6 +863,13 @@ export async function bootstrapApp() {
       if (e.target === e.currentTarget) closeModal();
     });
 
+    document.getElementById("chatFilesToggle")?.addEventListener("click", async () => {
+      const menu = document.getElementById("chatFilesMenu");
+      if (!menu) return;
+      menu.classList.toggle("open");
+      if (menu.classList.contains("open")) await loadChatFilePicker();
+    });
+
     document.getElementById("chatInput")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -804,6 +888,9 @@ export async function bootstrapApp() {
     initSearchLanguageSelect(document.getElementById("searchLang"), state.lang);
     await initSources();
     initDmsNavigation(getCurrentUser());
+    syncSuperAdminUi(getCurrentUser());
+    const loginDetailsBtn = document.getElementById("sidebarLoginDetailsBtn");
+    loginDetailsBtn?.addEventListener("click", () => window.switchDmsModule?.("users"));
     initNotifications();
     initSavedSearches();
     initSimilarDocsPanel();
@@ -812,12 +899,8 @@ export async function bootstrapApp() {
     initAiInsightsPanel();
 
     document.getElementById("chatNew")?.addEventListener("click", startNewChat);
-    document.getElementById("chatClear")?.addEventListener("click", () => {
-      if (confirm("Clear all messages in this chat?")) clearCurrentChat();
-    });
-    document.getElementById("chatDelete")?.addEventListener("click", () => {
-      if (confirm("Delete this chat permanently?")) deleteCurrentChat();
-    });
+    document.getElementById("chatClear")?.addEventListener("click", clearCurrentChat);
+    document.getElementById("chatDelete")?.addEventListener("click", deleteCurrentChat);
     document.getElementById("chatUndo")?.addEventListener("click", () => {
       if (chat.undo()) { renderChatUI(); showToast("Undone"); }
     });

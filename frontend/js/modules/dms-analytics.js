@@ -246,7 +246,7 @@ export async function loadDmsAnalytics() {
       }
       <div class="analytics-legend">
         <span>Storage: <strong>${esc(data.storage)}</strong></span>
-        ${data.openaiEnabled ? '<span class="analytics-status status-live">OpenAI enabled</span>' : '<span class="analytics-status status-partial">OpenAI not configured</span>'}
+        ${data.openaiEnabled ? '<span class="analytics-status status-live">AI enabled</span>' : '<span class="analytics-status status-partial">AI not configured</span>'}
         <span>Updated: ${formatDate(data.updatedAt)}</span>
       </div>
       ${renderConnectionsTable(connections)}

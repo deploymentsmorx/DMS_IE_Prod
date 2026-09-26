@@ -9,7 +9,7 @@ const db = require('../lib/db');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-function createRouter(broadcast) {
+function createRouter(broadcast, options = {}) {
   const router = express.Router();
   const sessions = new Map();
 
@@ -40,6 +40,23 @@ function createRouter(broadcast) {
     const session = { id: user.id, name: user.name, email: user.email, role: user.role, department: user.department, groups: user.groups };
     sessions.set(token, session);
     db.appendAudit({ action: 'login', userId: user.id, user: user.name });
+    res.json({ token, user: session });
+  });
+
+  router.post('/auth/sso', (req, res) => {
+    const external = options.resolveUser?.(req);
+    if (!external) return res.status(401).json({ error: 'Please log in' });
+    const token = crypto.randomBytes(24).toString('hex');
+    const session = {
+      id: external.id,
+      name: external.name,
+      email: external.email,
+      role: external.role,
+      department: external.department,
+      groups: external.groups,
+    };
+    sessions.set(token, session);
+    db.appendAudit({ action: 'login', userId: session.id, user: session.name, via: 'sso' });
     res.json({ token, user: session });
   });
 

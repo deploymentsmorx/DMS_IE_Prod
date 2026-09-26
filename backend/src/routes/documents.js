@@ -4,12 +4,17 @@ const db = require("../services/dbService");
 const store = require("../services/relationalStore");
 const { searchDocuments, findSimilarDocuments } = require("../services/searchService");
 const { filterAccessibleDocuments, buildStats } = require("../services/sourceAccessService");
+const { loadEnterpriseDocuments, mergeDocuments } = require("../services/libraryDocuments");
 
 router.get("/", async (req, res) => {
   try {
     const { q, source, fileType, category, department, limit, lang } = req.query;
     const connections = store.getConnectedSources();
-    if (!connections.length) {
+    const connectedDocs = connections.length
+      ? filterAccessibleDocuments(await db.getAllDocuments())
+      : [];
+    const all = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
+    if (!all.length && !connections.length) {
       return res.json({
         results: [],
         total: 0,
@@ -22,7 +27,6 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const all = filterAccessibleDocuments(await db.getAllDocuments());
     const results = searchDocuments(all, {
       q,
       source,
@@ -53,7 +57,11 @@ router.get("/", async (req, res) => {
 router.get("/stats", async (_req, res) => {
   try {
     const connections = store.getConnectedSources();
-    if (!connections.length) {
+    const connectedDocs = connections.length
+      ? filterAccessibleDocuments(await db.getAllDocuments())
+      : [];
+    const docs = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
+    if (!docs.length && !connections.length) {
       return res.json({
         total: 0,
         bySource: {},
@@ -65,7 +73,6 @@ router.get("/stats", async (_req, res) => {
         storage: db.isUsingNeon() ? "neondb" : "memory",
       });
     }
-    const docs = await db.getAllDocuments();
     const stats = buildStats(docs);
 
     res.json({

@@ -23,6 +23,20 @@ router.get("/:department/:filename", (req, res) => {
 
   const department = decodeURIComponent(req.params.department);
   const filename = decodeURIComponent(req.params.filename);
+
+  if (department === "local") {
+    let localPath = "";
+    try {
+      localPath = Buffer.from(filename, "base64url").toString("utf8");
+    } catch {
+      return res.status(400).json({ error: "Invalid local file reference" });
+    }
+    if (!localPath || !fs.existsSync(localPath)) {
+      return res.status(404).json({ error: "File not found on this PC" });
+    }
+    return res.sendFile(path.resolve(localPath));
+  }
+
   const filePath = path.join(store.UPLOADS_DIR, department, filename);
 
   if (!fs.existsSync(filePath)) {

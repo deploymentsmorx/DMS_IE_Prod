@@ -133,7 +133,7 @@ MODULE_RENDERERS.search = async function() {
   }
 
   const mod = state.platform.modules.find(m => m.id === 'search');
-  const repoChecks = ['local','sharepoint','onedrive','gdrive','dropbox','teams','slack','confluence','jira'].map(r =>
+  const repoChecks = ['local','sharepoint','onedrive','box','slack','confluence','jira'].map(r =>
     `<label class="check-label"><input type="checkbox" class="repo-check" value="${r}" ${r==='local'?'checked':''}/> ${esc(r)}</label>`
   ).join('');
 
@@ -334,13 +334,13 @@ MODULE_RENDERERS['ai-assistant'] = async function() {
   let status = '';
   try {
     const s = await api('/ai/status');
-    status = s.configured ? `<span class="badge" style="background:rgba(46,204,113,.2);color:#5ddea8">OpenAI · ${esc(s.model)}</span>` : '<span class="badge warn">OpenAI not configured</span>';
+    status = s.configured ? `<span class="badge" style="background:rgba(46,204,113,.2);color:#5ddea8">AI ready</span>` : '<span class="badge warn">AI not configured</span>';
   } catch {}
   let answer = '';
   if (q) {
     const r = await api('/ai/ask', { method:'POST', body: JSON.stringify({ question: q }) });
     const text = r.rawAnswer || r.answers.map(a => a.answer).join('\n');
-    answer = `<div class="ai-answer"><p>${esc(text)}</p>${r.poweredBy ? `<small>Powered by ${esc(r.poweredBy)} (${esc(r.model)})</small>` : ''}</div>`;
+    answer = `<div class="ai-answer"><p>${esc(text)}</p></div>`;
   }
   return `${featureList(mod.features)} ${status}
     ${card('Chat with documents', `

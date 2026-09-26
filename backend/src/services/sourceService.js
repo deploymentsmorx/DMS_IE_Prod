@@ -159,10 +159,10 @@ async function connect(typeId, config = {}, label, options = {}) {
   }
 
   store.updateConnectedSource(connection.id, {
-    status: syncResult.error && !syncResult.imported ? "connected" : "synced",
+    status: syncResult.error && !syncResult.imported ? "error" : syncResult.imported ? "synced" : "connected",
     lastSync: new Date().toISOString(),
     documentCount: syncResult.imported || 0,
-    lastError: syncResult.error && !syncResult.imported ? syncResult.error : null,
+    lastError: syncResult.error || null,
   });
 
   runPostConnectWorkflows(typeId, connection.id);
@@ -378,11 +378,58 @@ async function syncLocalFolderUpload(sourceId, files) {
   };
 }
 
+async function connectLocalSystemScan(config = {}, label) {
+  const { getDefaultLocalPaths } = require("./sourceAutoConfigService");
+  const autoPaths = getDefaultLocalPaths();
+  if (!autoPaths.length) {
+    throw new Error("No local folders found on this PC (Documents, Desktop, Downloads).");
+  }
+
+  const resolvedConfig = {
+    ...resolveAutoConfig("local_directory", config),
+    browserUpload: false,
+    localOnly: true,
+    scanAll: true,
+    autoPaths,
+    path: autoPaths[0],
+  };
+
+  const connection = store.addConnectedSource({
+    type: "local_directory",
+    label: label || "Local System Data",
+    config: resolvedConfig,
+    status: "syncing",
+  });
+
+  setImmediate(() => {
+    runBackgroundSync(connection.id, "local_directory").catch(() => {});
+  });
+
+  runPostConnectWorkflows("local_directory", connection.id);
+
+  return {
+    connection: {
+      ...store.getConnectedSource(connection.id),
+      config: sanitizeConfig(store.getConnectedSource(connection.id).config),
+    },
+    sync: {
+      imported: 0,
+      background: true,
+      localOnly: true,
+      scanAll: true,
+      scannedPaths: autoPaths.map((p) => ({ path: p })),
+      message:
+        `Connected. Indexing local files from ${autoPaths.length} folder(s) on this PC. Files stay on your system — you can search and chat as they appear.`,
+    },
+  };
+}
+
 module.exports = {
   listSourceTypes,
   getConnections,
   connect,
   connectLocalFolderUpload,
+  connectLocalSystemScan,
   syncLocalFolderUpload,
   syncConnection,
   syncAll,

@@ -1,11 +1,17 @@
 require("dotenv").config();
 
 const path = require("path");
+const http = require("http");
 const express = require("express");
 const cors = require("cors");
+const { WebSocketServer } = require("ws");
 const db = require("./services/dbService");
+const authService = require("./services/authService");
+const { extractToken } = require("./middleware/auth");
+const createEnterpriseRouter = require("../enterprise/routes");
 
 const FRONTEND_DIR = path.join(__dirname, "../../frontend");
+const ENTERPRISE_FRONTEND_DIR = path.join(__dirname, "../../frontend/enterprise");
 
 const documentsRouter = require("./routes/documents");
 const chatRouter = require("./routes/chat");
@@ -23,6 +29,7 @@ const filesRouter = require("./routes/files");
 const sourcesRouter = require("./routes/sources");
 const googleOAuthRouter = require("./routes/googleOAuth");
 const authRouter = require("./routes/auth");
+const licenseRouter = require("./routes/license");
 const documentVersionRouter = require("./modules/documentVersion/router");
 const governanceRouter = require("./routes/governance");
 const analyticsRouter = require("./routes/analytics");
@@ -50,14 +57,42 @@ app.use(
     },
   })
 );
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
+
+const liveClients = new Set();
+
+function broadcastEnterprise(payload) {
+  const data = JSON.stringify(payload);
+  for (const client of liveClients) {
+    if (client.readyState === 1) client.send(data);
+  }
+}
+
+function enterpriseUser(req) {
+  const user = authService.validateToken(extractToken(req));
+  if (!user) return null;
+  const role = user.role === "user" ? "viewer" : "admin";
+  return {
+    id: user.id || user.username,
+    name: user.displayName || user.username,
+    email: `${user.username}@smorx.ai`,
+    role,
+    department: "General",
+    groups: role === "admin" ? ["admins", "all-staff"] : ["all-staff"],
+  };
+}
+
+app.use("/enterprise-api", createEnterpriseRouter(broadcastEnterprise, { resolveUser: enterpriseUser }));
+app.use("/enterprise", express.static(ENTERPRISE_FRONTEND_DIR));
 
 app.use("/api/auth", authRouter);
+app.use("/api", licenseRouter);
 
 app.use("/api/sources/google", googleOAuthRouter);
 
 app.use("/api", (req, res, next) => {
   if (req.path === "/health") return next();
+  if (req.path === "/license/activate") return next();
   return requireAuth(req, res, next);
 });
 
@@ -69,6 +104,7 @@ app.get("/api", (_req, res) => {
       searchEngine: "/api/documents",
       documentVersion: "/api/dms/version",
       analytics: "/api/analytics/dashboard",
+      enterpriseSuite: "/enterprise/",
     },
     openai: !!process.env.OPENAI_API_KEY,
     app: "Open http://localhost:" + PORT + " for the full UI",
@@ -129,16 +165,23 @@ app.use("/api/notifications", notificationsRouter);
 
 app.use(express.static(FRONTEND_DIR));
 app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api")) return next();
+  if (req.path.startsWith("/api") || req.path.startsWith("/enterprise")) return next();
   res.sendFile(path.join(FRONTEND_DIR, "index.html"));
 });
 
 async function start() {
   await db.initDb();
   const emailService = require("./services/emailService");
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server, path: "/ws" });
+  wss.on("connection", (ws) => {
+    liveClients.add(ws);
+    ws.send(JSON.stringify({ type: "connected", message: "Connected — receiving live updates" }));
+    ws.on("close", () => liveClients.delete(ws));
+  });
+  server.listen(PORT, () => {
     console.log(`✅  SmorX.ai DMS  → http://localhost:${PORT}`);
-    console.log(`   Modules: Search Engine · Document Version`);
+    console.log(`   Modules: Search · Version · Analytics · Governance · Enterprise Suite`);
     console.log(`   Login: superadmin / SuperAdmin@123`);
     console.log(`   API docs       → http://localhost:${PORT}/api`);
     console.log(`   Storage: ${db.isUsingNeon() ? "Neon PostgreSQL" : "JSON (local)"}`);

@@ -128,6 +128,7 @@ function clearActiveChat() {
   pushUndo({ type: "clear", snapshot: cloneSessionMessages(session) });
   session.messages = [];
   session.apiHistory = [];
+  session.title = "New Chat";
   session.updatedAt = new Date().toISOString();
   saveSessions();
 }

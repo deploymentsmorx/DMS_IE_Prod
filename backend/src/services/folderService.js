@@ -28,13 +28,28 @@ async function extractText(filePath, ext) {
   return "";
 }
 
-function walkDir(dir, files = []) {
-  if (!fs.existsSync(dir)) return files;
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+const SKIP_DIRS = new Set([
+  "node_modules", ".git", ".svn", "appdata", "application data",
+  "local settings", "temp", "tmp", "$recycle.bin", "system volume information",
+  "windows", "program files", "program files (x86)", "programdata",
+]);
+
+function walkDir(dir, files = [], options = {}) {
+  const maxFiles = options.maxFiles || 5000;
+  if (!fs.existsSync(dir) || files.length >= maxFiles) return files;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return files;
+  }
   for (const entry of entries) {
+    if (files.length >= maxFiles) break;
+    if (entry.name.startsWith(".")) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      walkDir(full, files);
+      if (SKIP_DIRS.has(entry.name.toLowerCase())) continue;
+      walkDir(full, files, options);
     } else if (SUPPORTED_EXT.has(path.extname(entry.name).toLowerCase())) {
       files.push(full);
     }
@@ -48,27 +63,35 @@ async function ingestFile(filePath, options = {}) {
   const fileName = path.basename(filePath);
   const department = options.department || store.guessDepartment(filePath);
   const content = await extractText(filePath, ext);
+  const keepInPlace = Boolean(options.keepInPlace || options.localOnly);
 
-  const uploadsDir = store.ensureUploadsDir();
-  const destDir = path.join(uploadsDir, department);
-  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+  let storedPath = filePath;
+  let url = "";
 
-  const destPath = path.join(destDir, `${Date.now()}-${fileName}`);
-  fs.copyFileSync(filePath, destPath);
+  if (keepInPlace) {
+    url = `/api/files/local/${encodeURIComponent(Buffer.from(filePath).toString("base64url"))}`;
+  } else {
+    const uploadsDir = store.ensureUploadsDir();
+    const destDir = path.join(uploadsDir, department);
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    storedPath = path.join(destDir, `${Date.now()}-${fileName}`);
+    fs.copyFileSync(filePath, storedPath);
+    url = `/api/files/${department}/${path.basename(storedPath)}`;
+  }
 
   return db.persistDocument({
     title: fileName,
-    description: `Imported from ${options.folderPath || filePath}`,
+    description: `Indexed from ${options.folderPath || filePath}`,
     content: content || fileName,
-    tags: [department, store.extToFileType(ext)],
+    tags: [department, store.extToFileType(ext), keepInPlace ? "local-index" : "upload"],
     department,
     category: department,
     source: options.source || "folder",
     fileType: store.extToFileType(ext),
     size: store.formatBytes(stat.size),
     folderPath: options.folderPath || path.dirname(filePath),
-    filePath: destPath,
-    url: `/api/files/${department}/${path.basename(destPath)}`,
+    filePath: storedPath,
+    url,
     connectionId: options.connectionId || null,
   }, { deferSave: options.deferSave });
 }

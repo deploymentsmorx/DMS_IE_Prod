@@ -116,8 +116,16 @@ router.post("/connect", async (req, res) => {
       return res.status(400).json({ error: "Use Sign in with Google for Google Drive" });
     }
     if (type === "local_directory") {
+      const mode = String(config?.mode || "").toLowerCase();
+      if (mode === "system" || mode === "scan_all" || config?.scanAll === true) {
+        const result = await sourceService.connectLocalSystemScan(
+          { ...(config || {}), department: config?.department || "auto" },
+          label || "Local System Data"
+        );
+        return res.status(201).json(result);
+      }
       return res.status(400).json({
-        error: "Use folder picker upload for Local Directory (works on Render and localhost).",
+        error: "Choose Select specific folder, or Sync all local system data.",
       });
     }
 

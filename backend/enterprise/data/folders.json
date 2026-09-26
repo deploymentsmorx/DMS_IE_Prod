@@ -1,0 +1,6 @@
+[
+  { "id": "root", "name": "All Documents", "parentId": null },
+  { "id": "policies", "name": "Policies", "parentId": "root" },
+  { "id": "projects", "name": "Projects", "parentId": "root" },
+  { "id": "meetings", "name": "Meeting Notes", "parentId": "root" }
+]

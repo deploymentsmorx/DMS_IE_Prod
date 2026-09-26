@@ -3,27 +3,37 @@ const router = express.Router();
 const db = require("../services/dbService");
 const { chatWithDocuments } = require("../services/chatService");
 const { filterAccessibleDocuments } = require("../services/sourceAccessService");
+const { loadEnterpriseDocuments, mergeDocuments } = require("../services/libraryDocuments");
 
 router.post("/", async (req, res) => {
   try {
-    const { message, history } = req.body;
+    const { message, history, documentIds, followUpIds } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
     }
 
     const store = require("../services/relationalStore");
-    if (!store.getConnectedSources().length) {
+    const connections = store.getConnectedSources();
+    const connectedDocs = connections.length
+      ? filterAccessibleDocuments(await db.getAllDocuments())
+      : [];
+    const allDocs = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
+    if (!allDocs.length) {
       return res.json({
-        reply: "Connect a data source first (sidebar → Connect a source). Documents are only searchable after you connect Google Drive, Local folder, or another source.",
+        reply: "There are no documents to chat with yet. Connect a source or add a file, then ask again.",
         references: [],
         model: null,
         hasOpenAI: !!process.env.OPENAI_API_KEY,
         requiresConnection: true,
       });
     }
-
-    const allDocs = filterAccessibleDocuments(await db.getAllDocuments());
-    const result = await chatWithDocuments(message.trim(), allDocs, history || []);
+    const result = await chatWithDocuments(
+      message.trim(),
+      allDocs,
+      history || [],
+      documentIds || [],
+      followUpIds || []
+    );
 
     res.json({
       reply: result.reply,

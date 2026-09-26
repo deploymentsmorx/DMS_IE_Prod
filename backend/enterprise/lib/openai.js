@@ -34,7 +34,16 @@ async function chat(system, user, { json = false, maxTokens = 1200 } = {}) {
   }
 
   const data = await res.json();
-  return data.choices[0].message.content.trim();
+  const content = data.choices[0].message.content.trim();
+  return content
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^[\t ]*[-*•]\s+/gm, '• ')
+    .trim();
 }
 
 function buildDocContext(docs) {
@@ -47,7 +56,7 @@ function buildDocContext(docs) {
 async function askDocuments({ question, documents }) {
   const context = buildDocContext(documents);
   const answer = await chat(
-    'You are a document assistant for an enterprise DMS. Answer using only the provided documents. Be concise and cite document names.',
+    'You are a document assistant for an enterprise DMS. Answer using only the provided documents. Be concise and cite document names. Plain text only: use "• " bullets when listing; never use "-", "*", **, __, # headings, backticks, or markdown.',
     `Documents:\n${context}\n\nQuestion: ${question}`,
   );
   return {

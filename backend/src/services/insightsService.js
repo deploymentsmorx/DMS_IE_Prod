@@ -1,5 +1,5 @@
 const path = require("path");
-const store = require(path.join(__dirname, "../../backend/lib/store"));
+const store = require(path.join(__dirname, "../../enterprise/lib/store"));
 const aux = require("./dmsAuxStore");
 const { ROLES } = require("../config/aiExamples");
 

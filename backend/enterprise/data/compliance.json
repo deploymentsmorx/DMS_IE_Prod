@@ -1,0 +1,9 @@
+{
+  "frameworks": ["ISO 9001", "FDA", "HIPAA", "GDPR"],
+  "retentionPolicies": [
+    { "id": "hr-docs", "name": "HR Documents", "years": 7, "autoArchive": true, "autoDelete": false },
+    { "id": "contracts", "name": "Contracts", "years": 10, "autoArchive": true, "autoDelete": false },
+    { "id": "temp-files", "name": "Temporary Files", "years": 1, "autoArchive": false, "autoDelete": true }
+  ],
+  "legalHolds": []
+}

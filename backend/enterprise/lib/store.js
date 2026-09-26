@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
 
-const DOCS_DIR = path.join(__dirname, '..', '..', 'documents');
+const DOCS_DIR = path.join(__dirname, '..', 'documents');
 const DOCUMENTS_FILE = 'documents.json';
 const AUTHORS_FILE = 'authors.json';
 
@@ -25,19 +25,6 @@ function versionPath(docId, versionId) {
 
 function filePath(docId) {
   return path.join(docDir(docId), 'current');
-}
-
-function originalFilePath(docId, filename) {
-  const ext = path.extname(filename || '').toLowerCase() || '.bin';
-  return path.join(docDir(docId), `source${ext}`);
-}
-
-function saveOriginalFile(docId, buffer, filename) {
-  if (!buffer?.length) return null;
-  ensureDocDir(docId);
-  const dest = originalFilePath(docId, filename);
-  fs.writeFileSync(dest, buffer);
-  return dest;
 }
 
 function ensureDocDir(docId) {
@@ -104,9 +91,6 @@ function listDocumentsSummary(folderId) {
       lastOrganization: last.organization,
       lastTime: last.time,
       lastMessage: last.message,
-      approvalStatus: doc.approvalStatus || 'draft',
-      fileType: doc.fileType || detectFileType(doc.name, doc.mimeType),
-      metadata: doc.metadata || {},
     };
   });
 }
@@ -133,11 +117,10 @@ function autoTags(name, content) {
   return tags;
 }
 
-function createDocument({ name, author, organization, content, message, folderId, mimeType, size, userId, metadata, ocrText }) {
+function createDocument({ name, author, organization, content, message, folderId, mimeType, size, userId }) {
   const docs = getDocuments();
   const id = docs.length ? Math.max(...docs.map(d => d.id)) + 1 : 1;
   const classification = detectClassification(name, content);
-  const fileType = detectFileType(name, mimeType);
   const version = {
     id: 'v1',
     author,
@@ -152,17 +135,13 @@ function createDocument({ name, author, organization, content, message, folderId
     folderId: folderId || 'root',
     mimeType: mimeType || 'text/plain',
     size: size || (content || '').length,
-    fileType,
     classification,
-    category: metadata?.department || 'General',
+    category: 'General',
     labels: [],
     tags: autoTags(name, content),
-    metadata: metadata || {},
+    metadata: {},
     checkedOutBy: null,
-    approvalStatus: 'draft',
-    approvalHistory: [],
-    signatures: [],
-    ocrText: ocrText || '',
+    ocrText: '',
     versions: [version],
   };
   docs.push(doc);
@@ -193,7 +172,6 @@ function saveVersion(docId, { author, organization, content, message, userId }) 
   saveDocuments(docs);
   writeVersionContent(doc.id, newId, content);
   db.appendAudit({ action: 'version_saved', userId, documentId: doc.id, version: newId });
-  doc.approvalStatus = 'draft';
   return enrichDocument(doc);
 }
 
@@ -265,107 +243,6 @@ function runOcr(docId, userId) {
 
 function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
-}
-
-function detectFileType(name, mimeType = '') {
-  const ext = path.extname(name || '').toLowerCase();
-  const map = {
-    '.docx': 'Word', '.doc': 'Word',
-    '.pdf': 'PDF',
-    '.txt': 'Text',
-    '.csv': 'CSV',
-    '.xlsx': 'Excel', '.xls': 'Excel',
-    '.pptx': 'PowerPoint', '.ppt': 'PowerPoint',
-  };
-  if (map[ext]) return map[ext];
-  if (mimeType.includes('pdf')) return 'PDF';
-  if (mimeType.includes('wordprocessingml')) return 'Word';
-  if (mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) return 'Excel';
-  if (mimeType.includes('presentationml') || mimeType.includes('ms-powerpoint')) return 'PowerPoint';
-  if (mimeType.includes('text/plain')) return 'Text';
-  if (mimeType.includes('text/csv')) return 'CSV';
-  return 'Document';
-}
-
-function submitForApproval(docId, { userId, userName, comment }) {
-  const docs = getDocuments();
-  const doc = docs.find((d) => d.id === Number(docId));
-  if (!doc) return null;
-  if (doc.approvalStatus === 'pending') return { error: 'Already pending approval' };
-  doc.approvalStatus = 'pending';
-  doc.approvalHistory = doc.approvalHistory || [];
-  doc.approvalHistory.push({
-    action: 'submitted',
-    by: userName,
-    userId,
-    comment: comment || 'Submitted for approval',
-    time: new Date().toISOString(),
-  });
-  saveDocuments(docs);
-  db.appendAudit({ action: 'approval_submitted', userId, documentId: docId, user: userName });
-  return enrichDocument(doc);
-}
-
-function resolveApproval(docId, { decision, userId, userName, comment }) {
-  const docs = getDocuments();
-  const doc = docs.find((d) => d.id === Number(docId));
-  if (!doc) return null;
-  if (doc.approvalStatus !== 'pending') return { error: 'Document is not pending approval' };
-  const status = decision === 'approve' ? 'approved' : 'rejected';
-  doc.approvalStatus = status;
-  doc.approvalHistory = doc.approvalHistory || [];
-  doc.approvalHistory.push({
-    action: status,
-    by: userName,
-    userId,
-    comment: comment || status,
-    time: new Date().toISOString(),
-  });
-  saveDocuments(docs);
-  db.appendAudit({ action: `approval_${status}`, userId, documentId: docId, user: userName });
-  return enrichDocument(doc);
-}
-
-function signVersion(docId, { versionId, signedBy, signatureText, userId }) {
-  const doc = getDocument(docId);
-  if (!doc) return null;
-  const ver = doc.versions.find((v) => v.id === (versionId || doc.versions.at(-1).id));
-  if (!ver) return null;
-  const docs = getDocuments();
-  const d = docs.find((x) => x.id === Number(docId));
-  d.signatures = d.signatures || [];
-  d.signatures.push({
-    versionId: ver.id,
-    signedBy,
-    signatureText: signatureText || `Signed by ${signedBy}`,
-    signedAt: new Date().toISOString(),
-    userId,
-  });
-  saveDocuments(docs);
-  db.appendAudit({ action: 'esignature', userId, documentId: docId, version: ver.id, user: signedBy });
-  return enrichDocument(d);
-}
-
-function deleteDocument(docId, userId) {
-  const docs = getDocuments();
-  const idx = docs.findIndex((d) => d.id === Number(docId));
-  if (idx === -1) return null;
-  const doc = docs[idx];
-  docs.splice(idx, 1);
-  saveDocuments(docs);
-  const dir = docDir(docId);
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  db.appendAudit({ action: 'document_deleted', userId, documentId: docId, name: doc.name });
-  return { deleted: true, id: doc.id, name: doc.name };
-}
-
-function getAuditForDocument(docId) {
-  const audit = db.read('audit.json', []);
-  return audit.filter((a) => String(a.documentId) === String(docId)).slice(0, 100);
-}
-
-function getAuditLog(limit = 100) {
-  return db.read('audit.json', []).slice(0, limit);
 }
 
 function getFolders() {
@@ -482,24 +359,15 @@ module.exports = {
   rollbackVersion,
   checkoutDocument,
   checkinDocument,
-  submitForApproval,
-  resolveApproval,
-  signVersion,
-  getAuditForDocument,
-  getAuditLog,
   updateMetadata,
   runOcr,
   getFolders,
   unifiedSearch,
   detectClassification,
-  detectFileType,
   detectPii,
   aiQuery,
   readVersionContent,
   writeVersionContent,
   ensureDocDir,
   docDir,
-  saveOriginalFile,
-  originalFilePath,
-  deleteDocument,
 };

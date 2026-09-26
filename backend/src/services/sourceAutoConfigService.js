@@ -33,8 +33,28 @@ function getDefaultLocalPaths() {
     path.join(home, "Documents"),
     path.join(home, "Desktop"),
     path.join(home, "Downloads"),
+    path.join(home, "Pictures"),
+    path.join(home, "Videos"),
+    path.join(home, "Music"),
+    path.join(home, "OneDrive"),
+    path.join(home, "OneDrive - Personal"),
   ];
-  return candidates.filter(pathExists);
+  if (process.env.USERPROFILE) {
+    candidates.push(
+      path.join(process.env.USERPROFILE, "Documents"),
+      path.join(process.env.USERPROFILE, "Desktop"),
+      path.join(process.env.USERPROFILE, "Downloads")
+    );
+  }
+  const seen = new Set();
+  return candidates
+    .map((p) => path.resolve(p))
+    .filter((p) => {
+      const key = p.toLowerCase();
+      if (seen.has(key) || !pathExists(p)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function getOneDriveLocalPaths() {
@@ -122,12 +142,6 @@ function resolveAutoConfig(typeId, config = {}) {
       merged.systemId = merged.systemId || process.env.SAP_SYSTEM_ID || "PRD";
       merged.client = merged.client || process.env.SAP_CLIENT || "100";
       merged.host = merged.host || process.env.SAP_HOST || "sap.company.com";
-      merged.autoSync = true;
-      break;
-    case "teams":
-      merged.teamId = merged.teamId || "auto";
-      merged.channelId = merged.channelId || "auto";
-      merged.tenantId = merged.tenantId || process.env.AZURE_TENANT_ID || "";
       merged.autoSync = true;
       break;
     default:

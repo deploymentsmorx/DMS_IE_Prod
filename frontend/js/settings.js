@@ -1,5 +1,8 @@
 import { applyTheme, watchSystemTheme } from "./theme.js";
 import { languageOptionsHtml } from "./languages.js";
+import { api } from "./api.js";
+import { getCurrentUser } from "./auth.js";
+import { isDmsSuperAdmin, syncSuperAdminUi } from "./superAdmin.js";
 
 export function initSettings(chat) {
   const overlay = document.getElementById("settingsModal");
@@ -8,6 +11,7 @@ export function initSettings(chat) {
   let activeSection = "general";
 
   function openSettings() {
+    syncSuperAdminUi(getCurrentUser());
     overlay.classList.add("open");
     renderSection(activeSection);
     renderChatHistoryList();
@@ -125,11 +129,83 @@ export function initSettings(chat) {
           </div>
           <button class="btn btn-danger" id="settingsClearAll">Delete all</button>
         </div>`,
+
+      users: `
+        <h2>Login &amp; system details</h2>
+        <p class="setting-desc" style="margin-bottom:14px">For customer EXE security (license, install password, Device ID, Activate), use <strong>Administration → Login &amp; system details</strong>. Username/password alone is not enough for a locked customer PC.</p>
+        <p class="setting-desc" style="margin-bottom:14px">Optional: create a simple internal login below (not device-locked). Prefer the Administration customer form for customer sites.</p>
+        <form id="addLoginForm" class="add-login-form">
+          <div class="field">
+            <label for="loginDetailName">Full name</label>
+            <input id="loginDetailName" required minlength="2" placeholder="e.g. Mordhwaj Singh"/>
+          </div>
+          <div class="field">
+            <label for="loginDetailUsername">Username</label>
+            <input id="loginDetailUsername" required minlength="2" autocomplete="off" placeholder="e.g. mordhwaj"/>
+          </div>
+          <div class="field">
+            <label for="loginDetailRole">Role</label>
+            <select id="loginDetailRole">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="loginDetailPassword">Temporary password</label>
+            <input id="loginDetailPassword" type="password" required minlength="6" autocomplete="new-password" placeholder="User signs in with this"/>
+          </div>
+          <div id="loginDetailStatus" class="form-status" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary" id="loginDetailSave">Create &amp; save</button>
+        </form>
+        <div id="loginDetailCreds" class="credentials-box" hidden></div>
+        <h3 style="margin-top:20px">Accounts</h3>
+        <div id="loginDetailUsers" class="settings-chat-list"><p class="hint">Loading…</p></div>`,
     };
+
+    if (section === "users" && !isDmsSuperAdmin(getCurrentUser())) {
+      panel.innerHTML = `<h2>Login details</h2><p class="hint">Super Admin access required.</p>`;
+      return;
+    }
 
     panel.innerHTML = sections[section] || sections.general;
     bindSectionEvents(section);
     if (section === "chat") renderChatHistoryList();
+    if (section === "users") loadLoginUsers();
+  }
+
+  async function loadLoginUsers() {
+    const el = document.getElementById("loginDetailUsers");
+    if (!el) return;
+    try {
+      const res = await api("/auth/users");
+      const users = res.users || [];
+      el.innerHTML = users.length
+        ? users.map((u) => `
+            <div class="settings-chat-item">
+              <span class="chat-item-title">${escapeHtml(u.displayName || u.username)}</span>
+              <span class="chat-item-date">${escapeHtml(u.username)} · ${escapeHtml(u.role)}</span>
+              ${u.builtIn
+                ? `<span class="chat-item-date">Built-in</span>`
+                : `<button type="button" class="chat-item-del" data-user-id="${escapeHtml(u.id)}">Remove</button>`}
+            </div>`).join("")
+        : "<p class='hint'>No users yet</p>";
+
+      el.querySelectorAll("[data-user-id]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Remove this login?")) return;
+          try {
+            await api(`/auth/users/${btn.dataset.userId}`, { method: "DELETE" });
+            await loadLoginUsers();
+            window.showToast?.("✅ Login removed");
+          } catch (err) {
+            window.showToast?.(err.message || "Could not remove login", true);
+          }
+        });
+      });
+    } catch (err) {
+      el.innerHTML = `<p class="hint">${escapeHtml(err.message || "Could not load users")}</p>`;
+    }
   }
 
   function renderChatHistoryList() {
@@ -200,6 +276,53 @@ export function initSettings(chat) {
         renderChatHistoryList();
       }
     });
+
+    if (section === "users") {
+      document.getElementById("addLoginForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const status = document.getElementById("loginDetailStatus");
+        const creds = document.getElementById("loginDetailCreds");
+        const btn = document.getElementById("loginDetailSave");
+        const username = document.getElementById("loginDetailUsername")?.value?.trim();
+        const displayName = document.getElementById("loginDetailName")?.value?.trim();
+        const role = document.getElementById("loginDetailRole")?.value;
+        const password = document.getElementById("loginDetailPassword")?.value;
+        if (status) {
+          status.textContent = "Saving…";
+          status.className = "form-status";
+        }
+        if (btn) btn.disabled = true;
+        try {
+          const res = await api("/auth/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, displayName, role, password }),
+          });
+          if (status) {
+            status.textContent = res.message || "Login created";
+            status.className = "form-status ok";
+          }
+          if (creds) {
+            creds.hidden = false;
+            creds.innerHTML = `
+              <strong>Give these login details to the user</strong>
+              <pre>Username: ${escapeHtml(res.user?.username)}
+Temporary password: ${escapeHtml(res.temporaryPassword)}
+Role: ${escapeHtml(res.user?.role)}</pre>`;
+          }
+          document.getElementById("addLoginForm")?.reset();
+          await loadLoginUsers();
+          window.showToast?.("✅ Login details saved");
+        } catch (err) {
+          if (status) {
+            status.textContent = err.message || "Could not create login";
+            status.className = "form-status error";
+          }
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
   }
 
   function panelChangeHandlers() {
@@ -244,4 +367,18 @@ export function initSettings(chat) {
   watchSystemTheme();
   applyTheme(chat.loadSettings());
   window.openSettings = openSettings;
+  window.openLoginDetails = () => {
+    syncSuperAdminUi(getCurrentUser());
+    // Prefer the full Administration page; fall back to settings modal.
+    if (typeof window.switchDmsModule === "function") {
+      window.switchDmsModule("users");
+      return;
+    }
+    activeSection = "users";
+    document.querySelectorAll(".settings-nav-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.section === "users");
+    });
+    overlay.classList.add("open");
+    renderSection("users");
+  };
 }

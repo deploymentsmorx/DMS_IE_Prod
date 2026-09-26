@@ -41,7 +41,7 @@ function setupDocumentUpload() {
     fd.append('author', state.user?.name || 'Uploader');
     fd.append('organization', state.user?.department || 'Unknown');
     fd.append('folderId', state.currentFolder);
-    await fetch(`${API}/api/documents/upload`, { method: 'POST', headers: { 'X-Session-Token': state.token }, body: fd });
+    await fetch(`${API}/documents/upload`, { method: 'POST', headers: { 'X-Session-Token': state.token }, body: fd });
     showToast(`Uploaded ${files.length} file(s)`);
     loadModule('documents');
   }
@@ -79,29 +79,62 @@ async function initApp() {
   loadModule('documents');
 }
 
-document.getElementById('loginBtn').onclick = async () => {
+document.getElementById('modalOverlay').onclick = e => { if (e.target === e.currentTarget) closeModal(); };
+
+const embedded = new URLSearchParams(location.search).get('embed') === '1';
+let ssoStarted = false;
+
+async function acceptParentAuth(token) {
+  if (ssoStarted || !token) return;
+  ssoStarted = true;
   try {
-    const data = await api('/auth/login', {
+    const res = await fetch(`${API}/auth/sso`, {
       method: 'POST',
-      body: JSON.stringify({
-        email: document.getElementById('loginEmail').value,
-        password: document.getElementById('loginPassword').value,
-      }),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '{}',
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Sign-in failed');
     state.token = data.token;
     localStorage.setItem('ds-token', data.token);
     await initApp();
   } catch (e) {
+    ssoStarted = false;
     showToast(e.message);
   }
-};
+}
 
-document.getElementById('modalOverlay').onclick = e => { if (e.target === e.currentTarget) closeModal(); };
+if (embedded) {
+  document.getElementById('loginScreen')?.classList.add('hidden');
+  window.addEventListener('message', (event) => {
+    if (event.origin !== location.origin) return;
+    if (event.data?.type !== 'smorx-auth') return;
+    acceptParentAuth(event.data.token);
+  });
+  window.parent?.postMessage({ type: 'enterprise-ready' }, location.origin);
+} else {
+  document.getElementById('loginBtn').onclick = async () => {
+    try {
+      const data = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: document.getElementById('loginEmail').value,
+          password: document.getElementById('loginPassword').value,
+        }),
+      });
+      state.token = data.token;
+      localStorage.setItem('ds-token', data.token);
+      await initApp();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
 
-(async () => {
-  if (state.token) {
-    try { await initApp(); return; } catch { localStorage.removeItem('ds-token'); state.token = null; }
-  }
-})();
+  (async () => {
+    if (state.token) {
+      try { await initApp(); return; } catch { localStorage.removeItem('ds-token'); state.token = null; }
+    }
+  })();
+}
 
 window.loadModule = loadModule;

@@ -40,12 +40,43 @@ function purgeSeedData() {
   if (changed) saveStore();
 }
 
+const REMOVED_SOURCE_TYPES = new Set([
+  "teams",
+  "google_drive",
+  "smb",
+  "nas",
+  "dropbox",
+  "ftp",
+  "sftp",
+  "sap",
+]);
+
+function purgeRemovedSources() {
+  if (!store?.connectedSources?.length) return;
+  const { getSourceType } = require("../config/sourceRegistry");
+  const before = store.connectedSources.length;
+  const kept = [];
+  for (const conn of store.connectedSources) {
+    if (REMOVED_SOURCE_TYPES.has(conn.type) || !getSourceType(conn.type)) {
+      const docSource = getSourceType(conn.type)?.docSource || conn.type;
+      store.documents = (store.documents || []).filter((d) => d.source !== docSource);
+      continue;
+    }
+    kept.push(conn);
+  }
+  if (kept.length !== before) {
+    store.connectedSources = kept;
+    saveStore();
+  }
+}
+
 function loadStore() {
   try {
     if (fs.existsSync(STORE_PATH)) {
       store = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
       purgeDemoDocuments();
       purgeSeedData();
+      purgeRemovedSources();
       const maxDoc = Math.max(0, ...store.documents.map((d) => Number(d.id) || 0));
       nextIds.doc = maxDoc + 1;
       const sourceIds = (store.connectedSources || [])

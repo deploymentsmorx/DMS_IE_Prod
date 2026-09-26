@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 
-const store = require(path.join(__dirname, "../../../backend/lib/store"));
+const store = require(path.join(__dirname, "../../../enterprise/lib/store"));
 const aux = require("../../services/dmsAuxStore");
 const gov = require("../../services/enterpriseGovernanceService");
 const { requireApprove } = require("../../middleware/auth");

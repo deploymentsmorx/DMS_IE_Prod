@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/styles.css"/>
   <link rel="stylesheet" href="css/document-version.css"/>
+  <script src="/desktop-bridge.js"></script>
   <script>
     (function () {
       try {
@@ -26,7 +27,7 @@
 </head>
 <body>
 
-<!-- Login -->
+<!-- Login / Activate -->
 <div class="overlay open" id="loginOverlay">
   <div class="login-modal">
     <div class="login-brand">
@@ -38,12 +39,16 @@
       </div>
       <div class="login-divider"></div>
       <h1 class="login-app-title">Document Management System</h1>
-      <p class="login-app-sub">Search Engine · Document Version · AI Assistant</p>
+      <p class="login-app-sub">Search · Version · Analytics · Governance · Enterprise Suite</p>
+    </div>
+    <div class="login-tabs" role="tablist">
+      <button type="button" class="login-tab active" id="dmsTabLogin" data-auth-tab="login">Sign in</button>
+      <button type="button" class="login-tab" id="dmsTabActivate" data-auth-tab="activate">Activate</button>
     </div>
     <form id="loginForm" class="login-form" action="javascript:void(0)" method="post" onsubmit="event.preventDefault(); window.doLogin(event); return false;">
       <div class="field">
-        <label for="loginUsername">Username</label>
-        <input id="loginUsername" name="username" type="text" placeholder="superadmin" autocomplete="username" required/>
+        <label for="loginUsername">Email / username</label>
+        <input id="loginUsername" name="username" type="text" placeholder="superadmin or engineer email" autocomplete="username" required/>
       </div>
       <div class="field">
         <label for="loginPassword">Password</label>
@@ -52,16 +57,119 @@
       <div id="loginError" class="login-error" role="alert"></div>
       <button type="button" class="login-submit-btn" id="loginBtn">Sign In</button>
     </form>
+    <form id="activateForm" class="login-form" hidden action="javascript:void(0)" method="post">
+      <p class="hint" style="margin:0 0 10px">First-time EXE setup. Send Device ID and Host name to Super Admin if they do not have them yet.</p>
+      <div class="field">
+        <label for="actDevice">Device ID</label>
+        <input id="actDevice" readonly/>
+      </div>
+      <div class="field">
+        <label for="actHost">Host name</label>
+        <input id="actHost" readonly/>
+      </div>
+      <p class="hint"><button type="button" class="link-btn" id="actDetect">Detect / refresh</button> · Paste below for web testing if empty.</p>
+      <div class="field">
+        <label for="actDeviceEdit">Device ID (paste if needed)</label>
+        <input id="actDeviceEdit" placeholder="DEV-..."/>
+      </div>
+      <div class="field">
+        <label for="actHostEdit">Host name (paste if needed)</label>
+        <input id="actHostEdit" placeholder="DESKTOP-..."/>
+      </div>
+      <div class="field">
+        <label for="actLicense">License key</label>
+        <input id="actLicense" required placeholder="AB-2026-XXXX" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label for="actInstall">Install password</label>
+        <input id="actInstall" type="password" required autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label for="actEmail">Email</label>
+        <input id="actEmail" type="email" required autocomplete="username"/>
+      </div>
+      <div class="field">
+        <label for="actTemp">Temporary password</label>
+        <input id="actTemp" type="password" required autocomplete="current-password"/>
+      </div>
+      <div id="activateError" class="login-error" role="alert"></div>
+      <button type="submit" class="login-submit-btn" id="activateBtn">Activate</button>
+    </form>
   </div>
 </div>
 <script>
 (function () {
   var AUTH_KEY = "adse_auth_token";
+  var DEVICE_KEY = "adse_device_id";
+  var HOST_KEY = "adse_hostname";
   var busy = false;
 
   function showErr(msg) {
     var el = document.getElementById("loginError");
     if (el) el.textContent = msg || "";
+  }
+
+  function showActErr(msg) {
+    var el = document.getElementById("activateError");
+    if (el) el.textContent = msg || "";
+  }
+
+  function persistMachine(deviceId, hostname) {
+    try {
+      if (deviceId) localStorage.setItem(DEVICE_KEY, deviceId);
+      if (hostname) localStorage.setItem(HOST_KEY, hostname);
+    } catch (e) {}
+  }
+
+  function getMachineSync() {
+    try {
+      if (window.smorxDesktop && typeof window.smorxDesktop.getMachine === "function") {
+        var m = window.smorxDesktop.getMachine() || {};
+        if (m.deviceId && m.hostname) {
+          persistMachine(m.deviceId, m.hostname);
+          return { deviceId: m.deviceId, hostname: m.hostname };
+        }
+      }
+    } catch (e0) {}
+    var deviceId = "";
+    var hostname = "";
+    try {
+      deviceId = localStorage.getItem(DEVICE_KEY) || "";
+      hostname = localStorage.getItem(HOST_KEY) || "";
+    } catch (e) {}
+    if (!deviceId) {
+      try {
+        deviceId = "WEB-" + btoa(navigator.userAgent).replace(/[^A-Z0-9]/gi, "").slice(0, 12);
+      } catch (e2) {
+        deviceId = "WEB-LOCAL";
+      }
+    }
+    if (!hostname) hostname = (navigator.platform || "browser").replace(/\s+/g, "-");
+    return { deviceId: deviceId, hostname: hostname };
+  }
+
+  function fillActivateFields() {
+    var m = getMachineSync();
+    var d = document.getElementById("actDevice");
+    var h = document.getElementById("actHost");
+    var de = document.getElementById("actDeviceEdit");
+    var he = document.getElementById("actHostEdit");
+    if (d) d.value = m.deviceId;
+    if (h) h.value = m.hostname;
+    if (de && !de.value) de.value = m.deviceId;
+    if (he && !he.value) he.value = m.hostname;
+  }
+
+  function showAuthTab(tab) {
+    var loginForm = document.getElementById("loginForm");
+    var activateForm = document.getElementById("activateForm");
+    var tabLogin = document.getElementById("dmsTabLogin");
+    var tabAct = document.getElementById("dmsTabActivate");
+    if (loginForm) loginForm.hidden = tab !== "login";
+    if (activateForm) activateForm.hidden = tab !== "activate";
+    if (tabLogin) tabLogin.classList.toggle("active", tab === "login");
+    if (tabAct) tabAct.classList.toggle("active", tab === "activate");
+    if (tab === "activate") fillActivateFields();
   }
 
   function enterApp(data) {
@@ -86,6 +194,7 @@
     var user = (document.getElementById("loginUsername") || {}).value;
     user = (user || "").trim();
     var pass = (document.getElementById("loginPassword") || {}).value || "";
+    var machine = getMachineSync();
 
     if (!user || !pass) {
       showErr("Please enter username and password.");
@@ -101,11 +210,17 @@
     fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: user, password: pass }),
+      body: JSON.stringify({
+        username: user,
+        password: pass,
+        deviceId: machine.deviceId,
+        hostName: machine.hostname
+      }),
     })
       .then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error(data.error || "Login failed");
+          persistMachine(machine.deviceId, machine.hostname);
           enterApp(data);
         });
       })
@@ -123,9 +238,79 @@
     return false;
   };
 
+  window.doActivate = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (busy) return false;
+    var deviceId = ((document.getElementById("actDeviceEdit") || {}).value || (document.getElementById("actDevice") || {}).value || "").trim();
+    var hostName = ((document.getElementById("actHostEdit") || {}).value || (document.getElementById("actHost") || {}).value || "").trim();
+    var licenseKey = ((document.getElementById("actLicense") || {}).value || "").trim();
+    var installPassword = (document.getElementById("actInstall") || {}).value || "";
+    var email = ((document.getElementById("actEmail") || {}).value || "").trim();
+    var temporaryPassword = (document.getElementById("actTemp") || {}).value || "";
+    var btn = document.getElementById("activateBtn");
+    busy = true;
+    showActErr("");
+    if (btn) { btn.disabled = true; btn.textContent = "Activating…"; }
+
+    fetch("/api/license/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        licenseKey: licenseKey,
+        installPassword: installPassword,
+        email: email,
+        temporaryPassword: temporaryPassword,
+        deviceId: deviceId,
+        hostName: hostName
+      }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || "Activation failed");
+          persistMachine(deviceId, hostName);
+          try {
+            if (window.smorxDesktop && typeof window.smorxDesktop.setActivated === "function") {
+              window.smorxDesktop.setActivated({
+                licenseKey: licenseKey,
+                email: email,
+                deviceId: deviceId,
+                hostname: hostName
+              });
+            }
+          } catch (eAct) {}
+          showActErr("");
+          var loginUser = document.getElementById("loginUsername");
+          if (loginUser) loginUser.value = email;
+          showAuthTab("login");
+          showErr("Activated. Sign in with your email and temporary password on this PC.");
+        });
+      })
+      .catch(function (err) {
+        showActErr(err.message || "Activation failed");
+      })
+      .finally(function () {
+        busy = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Activate";
+        }
+      });
+    return false;
+  };
+
   document.getElementById("loginBtn").addEventListener("click", window.doLogin);
   document.getElementById("loginPassword").addEventListener("keydown", function (e) {
     if (e.key === "Enter") window.doLogin(e);
+  });
+  document.getElementById("activateForm").addEventListener("submit", window.doActivate);
+  document.getElementById("dmsTabLogin").addEventListener("click", function () { showAuthTab("login"); });
+  document.getElementById("dmsTabActivate").addEventListener("click", function () { showAuthTab("activate"); });
+  document.getElementById("actDetect").addEventListener("click", function () {
+    try {
+      localStorage.removeItem(DEVICE_KEY);
+      localStorage.removeItem(HOST_KEY);
+    } catch (e) {}
+    fillActivateFields();
   });
 })();
 </script>
@@ -167,8 +352,9 @@
         </div>
       </div>
       <div class="topbar-center">
-        <h1 class="app-title">Advance Directory Search Engine</h1>
+        <h1 class="app-title">Document Management System</h1>
         <span class="app-subtitle">SmorX.ai · Enterprise Document Intelligence</span>
+        <button type="button" class="btn btn-primary header-search-btn" id="headerSearchBtn">Search documents</button>
       </div>
       <div class="topbar-actions">
         <div id="userBadge" class="user-badge"></div>
@@ -201,12 +387,22 @@
       <button type="button" class="dms-module-btn" data-dms-module="version">Document Version</button>
       <button type="button" class="dms-module-btn" data-dms-module="analytics">Feature Analytics</button>
       <button type="button" class="dms-module-btn" data-dms-module="governance">Enterprise Governance</button>
+      <button type="button" class="dms-module-btn" data-dms-module="enterprise">Enterprise Suite</button>
+      <button type="button" class="dms-module-btn" data-dms-module="guide">How to use</button>
+      <button type="button" class="dms-module-btn" data-dms-module="users" id="dmsUsersModuleBtn" hidden>Login &amp; user details</button>
+    </div>
+
+    <div class="sidebar-group" id="adminSidebarGroup" hidden>
+      <h4>Administration</h4>
+      <button type="button" class="nav-btn" id="sidebarLoginDetailsBtn">
+        <span class="nav-icon">👤</span> Add / manage users
+      </button>
     </div>
 
     <div id="searchSidebarExtras">
     <div class="sidebar-brand">
       <strong style="font-size:12px;color:var(--text2)">Workspace</strong>
-      <p>Unified search across Drive, OneDrive & local folders</p>
+      <p>Unified search across OneDrive & Local folders</p>
     </div>
     <div class="sidebar-group">
       <h4>Data Sources</h4>
@@ -216,12 +412,8 @@
       <p class="sidebar-hint" id="sidebarSourceHint">No sources connected yet. Connect a source from the sidebar to import documents.</p>
       <div id="sidebarConnections" class="sidebar-connections dms-hidden"></div>
       <button class="nav-btn active" data-src="all" onclick="setSource('all',this)">
-        <span class="src-dot" style="background:var(--text3)"></span> All Sources
+        <span class="src-dot" style="background:var(--text3)"></span> Sources
         <span class="pill" id="cnt-all">0</span>
-      </button>
-      <button class="nav-btn" data-src="google_drive" onclick="setSource('google_drive',this)">
-        <span class="src-dot" style="background:var(--gdrive)"></span> Google Drive
-        <span class="pill" id="cnt-google_drive">0</span>
       </button>
       <button class="nav-btn" data-src="onedrive" onclick="setSource('onedrive',this)">
         <span class="src-dot" style="background:var(--onedrive)"></span> OneDrive
@@ -230,26 +422,6 @@
       <button class="nav-btn" data-src="local" onclick="setSource('local',this)">
         <span class="src-dot" style="background:#94a3b8"></span> Local
         <span class="pill" id="cnt-local">0</span>
-      </button>
-      <button class="nav-btn" data-src="smb" onclick="setSource('smb',this)">
-        <span class="src-dot" style="background:#a78bfa"></span> SMB / NAS
-        <span class="pill" id="cnt-smb">0</span>
-      </button>
-      <button class="nav-btn" data-src="dropbox" onclick="setSource('dropbox',this)">
-        <span class="src-dot" style="background:#0061ff"></span> Dropbox
-        <span class="pill" id="cnt-dropbox">0</span>
-      </button>
-      <button class="nav-btn" data-src="ftp" onclick="setSource('ftp',this)">
-        <span class="src-dot" style="background:#fb923c"></span> FTP/SFTP
-        <span class="pill" id="cnt-ftp">0</span>
-      </button>
-      <button class="nav-btn" data-src="sap" onclick="setSource('sap',this)">
-        <span class="src-dot" style="background:#0ea5e9"></span> SAP ERP
-        <span class="pill" id="cnt-sap">0</span>
-      </button>
-      <button class="nav-btn" data-src="teams" onclick="setSource('teams',this)">
-        <span class="src-dot" style="background:#6264a7"></span> Microsoft Teams
-        <span class="pill" id="cnt-teams">0</span>
       </button>
     </div>
 
@@ -266,7 +438,7 @@
 
     <div class="sidebar-footer">
       <strong>SmorX.ai DMS</strong>
-      <span>Search Engine · Version Control · AI</span>
+      <span>Search · Version · Enterprise Suite</span>
     </div>
     </div>
   </nav>
@@ -343,14 +515,214 @@
     <div class="version-module-wrap" id="governanceModuleRoot"></div>
   </main>
 
+  <main class="main dms-hidden" id="dmsEnterpriseView">
+    <iframe id="enterpriseFrame" class="enterprise-frame" title="Enterprise Suite"></iframe>
+  </main>
+
+  <main class="main dms-hidden" id="dmsGuideView">
+    <div class="howto dms-howto">
+      <header class="howto-head">
+        <p class="howto-kicker">Start here</p>
+        <h1>How to use SmorX.ai DMS</h1>
+        <p>Document Management System: connect sources, search files, chat with documents, manage versions, and run governance. Use the left modules in the order below when you are new.</p>
+      </header>
+
+      <div class="howto-rule">One rule: connect a data source before you expect search or AI answers. Empty Sources means empty results.</div>
+
+      <h2>Modules (left sidebar)</h2>
+      <div class="howto-grid">
+        <article class="howto-card">
+          <strong>Document Search Engine</strong>
+          <p class="howto-job">Find files across connected sources.</p>
+          <p>Use department / type / language filters. Open a result to preview. Use Quick Find for common topics (Inspection, CAD, Invoices).</p>
+        </article>
+        <article class="howto-card">
+          <strong>Document Version</strong>
+          <p class="howto-job">Track revisions of the same document.</p>
+          <p>Compare versions, keep history, and open the latest approved revision for engineering / quality packs.</p>
+        </article>
+        <article class="howto-card">
+          <strong>Feature Analytics</strong>
+          <p class="howto-job">See usage and search health.</p>
+          <p>Review volumes, top matches, and whether AI is enabled. Use this when search quality or coverage looks wrong.</p>
+        </article>
+        <article class="howto-card">
+          <strong>Enterprise Governance</strong>
+          <p class="howto-job">Policies, retention, workflows.</p>
+          <p>Define who can approve, how long files are kept, and governance checklists for controlled documents.</p>
+        </article>
+        <article class="howto-card">
+          <strong>Enterprise Suite</strong>
+          <p class="howto-job">Classification, connectors, AI tools.</p>
+          <p>Open the embedded suite for deeper enterprise features (classification, AI assistant on the suite side, connector status).</p>
+        </article>
+        <article class="howto-card">
+          <strong>Login &amp; system details</strong>
+          <p class="howto-job">Super Admin only — EXE customer provisioning.</p>
+          <p>Same Autoballoon-style form: company, license, install password, Device ID, Host name, engineer email, temporary password. Customer Activates, then signs in on the approved PC only. Built-in superadmin is not device-bound.</p>
+        </article>
+      </div>
+
+      <h2>Customer EXE handoff (Super Admin)</h2>
+      <ol class="howto-flow">
+        <li>
+          <strong>A. Customer opens Activate</strong>
+          <em>Login → Activate</em>
+          <span>Customer sends Device ID and Host name from the Activate tab to Super Admin.</span>
+        </li>
+        <li>
+          <strong>B. Super Admin provisions</strong>
+          <em>Administration → Login &amp; system details</em>
+          <span>Create organisation + license + device + engineer in one form. Copy License key, Install password, Email, and Temporary password to the customer.</span>
+        </li>
+        <li>
+          <strong>C. Customer Activates then signs in</strong>
+          <em>Activate → Sign in</em>
+          <span>Username/password alone is not enough for a customer EXE: they must Activate first. With require-device on, login fails on a different Device ID.</span>
+        </li>
+      </ol>
+
+      <h2>Day-one flow</h2>
+      <ol class="howto-flow">
+        <li>
+          <strong>1. Sign in</strong>
+          <em>Login screen</em>
+          <span>Platform Super Admin: superadmin (not device-bound). Customer engineers: Activate first, then email + temporary password on the approved PC.</span>
+        </li>
+        <li>
+          <strong>2. Connect a source</strong>
+          <em>Data Sources</em>
+          <span>Click Connect a source. Add Local folders and/or OneDrive. Wait for sync; Sources count should rise above zero.</span>
+        </li>
+        <li>
+          <strong>3. Search</strong>
+          <em>Document Search Engine</em>
+          <span>Type keywords or use chips (Department / Type). Open a document from the list. Use Sync in the top bar after new files arrive.</span>
+        </li>
+        <li>
+          <strong>4. Ask the AI assistant</strong>
+          <em>Right panel</em>
+          <span>Ask in plain language about connected files. Answers use document text; select files when you want a scoped reply. Replies are plain bullets.</span>
+        </li>
+        <li>
+          <strong>5. Versions &amp; governance</strong>
+          <em>Modules</em>
+          <span>Use Document Version for revision history. Use Enterprise Governance for retention and approval rules before releasing controlled docs.</span>
+        </li>
+        <li>
+          <strong>6. Admin (Super Admin)</strong>
+          <em>Administration</em>
+          <span>Provision EXE customers with license + install password + device lock. Prefer Admin/User roles for daily engineers; keep platform Super Admin limited.</span>
+        </li>
+      </ol>
+
+      <h2>Feature map</h2>
+      <div class="howto-table-wrap">
+        <table>
+          <thead><tr><th>Feature</th><th>Where</th><th>How to use</th></tr></thead>
+          <tbody>
+            <tr><td>Connect Local / OneDrive</td><td>Data Sources</td><td>Connect a source → pick type → authorize or choose folder → Sync</td></tr>
+            <tr><td>Full-text search</td><td>Search Engine</td><td>Query + filters; open result cards; language selector for multilingual docs</td></tr>
+            <tr><td>Saved searches</td><td>Search toolbar</td><td>Save search / Saved menu to reuse common queries</td></tr>
+            <tr><td>AI chat</td><td>Right panel</td><td>Ask questions; New / Clear / History in chat header</td></tr>
+            <tr><td>Notifications</td><td>Top bar</td><td>Bell icon for sync and system alerts</td></tr>
+            <tr><td>Settings</td><td>Top bar ⚙</td><td>Theme, language, chat history, data export</td></tr>
+            <tr><td>Add / upload</td><td>Top bar + Add</td><td>Upload or register documents into the index</td></tr>
+            <tr><td>Document Version</td><td>Module</td><td>Select a document family and inspect revision timeline</td></tr>
+            <tr><td>Analytics</td><td>Module</td><td>Dashboard of counts, AI status, search activity</td></tr>
+            <tr><td>Governance</td><td>Module</td><td>Policies, retention, workflow automation</td></tr>
+            <tr><td>Enterprise Suite</td><td>Module</td><td>Iframe suite: connectors, classification, suite AI</td></tr>
+            <tr><td>EXE customer provisioning</td><td>Administration</td><td>Super Admin creates company + license + install password + Device ID/Host + engineer email + temp password; customer Activates then signs in</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="howto-benefits" style="margin-top:28px">
+        <h2>What good usage looks like</h2>
+        <ul>
+          <li>Every team member has their own login (not a shared superadmin session).</li>
+          <li>At least one source stays connected; Sync runs after large file drops.</li>
+          <li>Search answers come from real files; AI is used to summarize, not invent.</li>
+          <li>Controlled documents go through Version + Governance before customer release.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <main class="main dms-hidden" id="dmsUsersView">
+    <div class="page-header">
+      <div class="page-header-text">
+        <div class="breadcrumb">ADSE <span>/</span> <span>Administration</span></div>
+        <h1>Login &amp; system details</h1>
+        <p>Fill one form to add organisation, license, device, and user — same idea as Autoballoon. Customer Activates, then signs in on the approved PC only.</p>
+      </div>
+    </div>
+    <div id="dmsUsersRoot" class="dms-users-layout">
+      <div class="content-card">
+        <h2>Add customer / engineer</h2>
+        <form id="dmsAddCustomerForm" class="add-login-form">
+          <div class="field">
+            <label for="dmsCompany">Company / organization name</label>
+            <input id="dmsCompany" required minlength="2" placeholder="Customer company"/>
+          </div>
+          <div class="field">
+            <label for="dmsLicense">License key (blank = auto AB-2026-XXXX)</label>
+            <input id="dmsLicense" placeholder="Leave blank to auto-generate" autocomplete="off"/>
+          </div>
+          <div class="field">
+            <label for="dmsInstall">Install password (blank = auto)</label>
+            <input id="dmsInstall" type="password" autocomplete="new-password" placeholder="Leave blank to auto-generate"/>
+          </div>
+          <label class="toggle-row"><input id="dmsRequireDevice" type="checkbox" checked/><span>Require device (EXE only on approved PC)</span></label>
+          <label class="toggle-row"><input id="dmsGrantFull" type="checkbox" checked/><span>Grant full access (Admin role)</span></label>
+          <div class="field">
+            <label for="dmsDevice">Device ID (from customer Activate screen)</label>
+            <input id="dmsDevice" required placeholder="DEV-..."/>
+          </div>
+          <div class="field">
+            <label for="dmsHost">Host name (from customer Activate screen)</label>
+            <input id="dmsHost" required placeholder="DESKTOP-..."/>
+          </div>
+          <div class="field">
+            <label for="dmsEngName">Engineer full name</label>
+            <input id="dmsEngName" required minlength="2"/>
+          </div>
+          <div class="field">
+            <label for="dmsEngEmail">Engineer email</label>
+            <input id="dmsEngEmail" type="email" required/>
+          </div>
+          <div class="field">
+            <label for="dmsEngRole">Role</label>
+            <select id="dmsEngRole">
+              <option value="user">User</option>
+              <option value="admin" selected>Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="dmsTempPassword">Temporary password</label>
+            <input id="dmsTempPassword" type="password" required minlength="6" autocomplete="new-password"/>
+          </div>
+          <div id="dmsUserStatus" class="form-status" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary" id="dmsUserSave">Create &amp; save</button>
+        </form>
+        <div id="dmsUserCreds" class="credentials-box" hidden></div>
+      </div>
+      <div class="content-card">
+        <h2>Licensed customers</h2>
+        <div id="dmsUsersTable"><p class="hint">Loading…</p></div>
+      </div>
+    </div>
+  </main>
+
   <aside class="chat-panel">
     <div class="chat-header">
       <div class="ai-pulse"></div>
       <div class="chat-header-text">
         <h3 id="chatTitle">Your Document AI Assistant</h3>
-        <p id="chatSessionLabel">Search & chat with your documents</p>
+        <p id="chatSessionLabel">Chat with one file or several. Give a file name as a clue, or pick files below.</p>
       </div>
-      <button class="btn btn-icon" id="chatNew" title="New chat">+</button>
+      <button class="btn btn-icon" id="chatNew" title="New chat" onclick="window.startNewChat && window.startNewChat()">+</button>
     </div>
 
     <div class="chat-toolbar">
@@ -361,14 +733,19 @@
           <div id="chatHistoryList"></div>
         </div>
       </div>
-      <button class="btn btn-sm" id="chatUndo" title="Undo" disabled>↩ Undo</button>
-      <button class="btn btn-sm" id="chatRedo" title="Redo" disabled>↪ Redo</button>
-      <button class="btn btn-sm" id="chatClear" title="Clear chat">Clear</button>
-      <button class="btn btn-sm" id="chatDelete" title="Delete chat">Delete</button>
+      <button class="btn btn-sm" id="chatUndo" title="Undo">↩ Undo</button>
+      <button class="btn btn-sm" id="chatRedo" title="Redo">↪ Redo</button>
+      <button class="btn btn-sm" id="chatClear" title="Clear chat" onclick="window.clearCurrentChat && window.clearCurrentChat()">Clear</button>
+      <button class="btn btn-sm" id="chatDelete" title="Delete chat" onclick="window.deleteCurrentChat && window.deleteCurrentChat()">Delete</button>
     </div>
 
     <div class="messages" id="messages"></div>
 
+    <div class="chat-files">
+      <button type="button" class="btn btn-sm" id="chatFilesToggle">Choose files</button>
+      <span id="chatFilesLabel">Using a file name in your question</span>
+      <div class="chat-files-menu" id="chatFilesMenu"></div>
+    </div>
     <div class="chat-footer">
       <textarea id="chatInput" placeholder="Ask about your documents…" rows="1"></textarea>
       <button class="send-btn" onclick="sendMessage()" title="Send">
@@ -403,8 +780,8 @@
     <div class="field">
       <label>Source</label>
       <select id="fSource">
-        <option value="google_drive">Google Drive</option>
         <option value="onedrive">OneDrive</option>
+        <option value="local">Local</option>
         <option value="manual">Manual</option>
       </select>
     </div>
@@ -488,6 +865,7 @@
         <button class="settings-nav-btn" data-section="chat">💬 Chat</button>
         <button class="settings-nav-btn" data-section="search">🔍 Search</button>
         <button class="settings-nav-btn" data-section="data">🗄️ Data controls</button>
+        <button class="settings-nav-btn" data-section="users" id="settingsUsersNav" hidden>👤 Login details</button>
       </nav>
       <div class="settings-content" id="settingsContent"></div>
     </div>
