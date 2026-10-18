@@ -28,6 +28,21 @@ async function extractText(filePath, ext) {
   return "";
 }
 
+async function extractTextFromBuffer(buffer, ext) {
+  if (!Buffer.isBuffer(buffer)) return "";
+  if (ext === ".txt" || ext === ".csv") return buffer.toString("utf8").slice(0, 50000);
+  if (ext === ".pdf") {
+    try {
+      const pdfParse = require("pdf-parse");
+      const data = await pdfParse(buffer);
+      return (data.text || "").slice(0, 50000);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 const SKIP_DIRS = new Set([
   "node_modules", ".git", ".svn", "appdata", "application data",
   "local settings", "temp", "tmp", "$recycle.bin", "system volume information",
@@ -63,37 +78,56 @@ async function ingestFile(filePath, options = {}) {
   const fileName = path.basename(filePath);
   const department = options.department || store.guessDepartment(filePath);
   const content = await extractText(filePath, ext);
-  const keepInPlace = Boolean(options.keepInPlace || options.localOnly);
-
-  let storedPath = filePath;
-  let url = "";
-
-  if (keepInPlace) {
-    url = `/api/files/local/${encodeURIComponent(Buffer.from(filePath).toString("base64url"))}`;
-  } else {
-    const uploadsDir = store.ensureUploadsDir();
-    const destDir = path.join(uploadsDir, department);
-    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-    storedPath = path.join(destDir, `${Date.now()}-${fileName}`);
-    fs.copyFileSync(filePath, storedPath);
-    url = `/api/files/${department}/${path.basename(storedPath)}`;
-  }
+  const sourcePath = path.resolve(filePath);
+  const url = `/api/files/local/${encodeURIComponent(Buffer.from(sourcePath).toString("base64url"))}`;
 
   return db.persistDocument({
     title: fileName,
-    description: `Indexed from ${options.folderPath || filePath}`,
+    description: `Indexed from ${options.folderPath || path.dirname(sourcePath)}`,
     content: content || fileName,
-    tags: [department, store.extToFileType(ext), keepInPlace ? "local-index" : "upload"],
+    tags: [department, store.extToFileType(ext), options.keepInPlace ? "local-index" : "upload"],
     department,
     category: department,
     source: options.source || "folder",
     fileType: store.extToFileType(ext),
     size: store.formatBytes(stat.size),
     folderPath: options.folderPath || path.dirname(filePath),
-    filePath: storedPath,
+    filePath: sourcePath,
     url,
     connectionId: options.connectionId || null,
   }, { deferSave: options.deferSave });
+}
+
+async function ingestBuffer(buffer, originalName, options = {}) {
+  const fileName = path.basename(String(originalName || "document"));
+  const ext = path.extname(fileName).toLowerCase();
+  if (!SUPPORTED_EXT.has(ext) || !Buffer.isBuffer(buffer)) return null;
+
+  const department = options.department || store.guessDepartment(fileName);
+  const content = await extractTextFromBuffer(buffer, ext);
+  const folderLabel = options.folderPath || options.folderLabel || "Browser upload";
+  const doc = await db.persistDocument({
+    title: fileName,
+    description: `Indexed from ${folderLabel}`,
+    content: content || fileName,
+    tags: [department, store.extToFileType(ext), "transient-upload"],
+    department,
+    category: department,
+    source: options.source || "upload",
+    fileType: store.extToFileType(ext),
+    size: store.formatBytes(buffer.length),
+    folderPath: folderLabel,
+    filePath: null,
+    url: "",
+    connectionId: options.connectionId || null,
+  });
+
+  store.putTransientFile(doc.id, {
+    buffer,
+    originalName: fileName,
+    mimeType: options.mimeType || "application/octet-stream",
+  });
+  return store.updateDocument(doc.id, { url: `/api/files/memory/${encodeURIComponent(doc.id)}` });
 }
 
 async function connectFolder(folderPath, department) {
@@ -105,21 +139,25 @@ async function connectFolder(folderPath, department) {
   const dept = department || store.guessDepartment(resolved);
   const files = walkDir(resolved);
   const imported = [];
+  const connectedFolder = store.addConnectedFolder({
+    path: resolved,
+    department: dept,
+    label: path.basename(resolved),
+    fileCount: 0,
+  });
 
   for (const file of files) {
     const doc = await ingestFile(file, {
       department: store.guessDepartment(file) !== "other" ? store.guessDepartment(file) : dept,
       folderPath: resolved,
       source: "folder",
+      connectionId: connectedFolder.id,
+      keepInPlace: true,
     });
     imported.push(doc);
   }
 
-  store.addConnectedFolder({
-    path: resolved,
-    department: dept,
-    fileCount: imported.length,
-  });
+  store.updateConnectedFolder(connectedFolder.id, { fileCount: imported.length });
 
   return { folder: resolved, department: dept, imported: imported.length, documents: imported };
 }
@@ -130,7 +168,7 @@ async function ingestBrowserFiles(files, options = {}) {
   const folderLabel = options.folderLabel || "Local folder";
 
   for (const file of files) {
-    if (!file?.path) continue;
+    if (!Buffer.isBuffer(file?.buffer)) continue;
     const ext = path.extname(file.originalname || file.filename || "").toLowerCase();
     if (!SUPPORTED_EXT.has(ext)) continue;
 
@@ -140,19 +178,17 @@ async function ingestBrowserFiles(files, options = {}) {
         ? options.department
         : store.guessDepartment(relativePath);
 
-    const doc = await ingestFile(file.path, {
+    const doc = await ingestBuffer(file.buffer, relativePath, {
       department: dept,
       folderPath: folderLabel,
       source: options.source || "local",
-      connectionId: options.connectionId,
-      deferSave: true,
+      connectionId,
+      mimeType: file.mimetype,
     });
-
-    imported.push(doc);
+    if (doc) imported.push(doc);
   }
 
-  if (!db.isUsingNeon()) store.flushStore();
   return imported;
 }
 
-module.exports = { connectFolder, ingestFile, ingestBrowserFiles, walkDir, SUPPORTED_EXT };
+module.exports = { connectFolder, ingestFile, ingestBuffer, ingestBrowserFiles, walkDir, SUPPORTED_EXT };

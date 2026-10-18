@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { getCurrentUser } from "../auth.js";
-import { isDmsSuperAdmin } from "../superAdmin.js";
+import { isDmsAdmin, isDmsSuperAdmin } from "../superAdmin.js";
 
 function escapeHtml(t) {
   const d = document.createElement("div");
@@ -129,16 +129,119 @@ Temporary password: ${escapeHtml(c.temporaryPassword)}</pre>
   });
 }
 
+async function loadTeamUsers() {
+  const el = document.getElementById("dmsTeamUserTable");
+  if (!el) return;
+  el.innerHTML = `<p class="hint">Loading accounts…</p>`;
+  try {
+    const res = await api("/auth/users");
+    const users = res.users || [];
+    const currentUser = getCurrentUser();
+    el.innerHTML = users.length
+      ? users.map((user) => `
+          <article class="admin-card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border, #e5e7eb);border-radius:10px">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+              <div><strong>${escapeHtml(user.displayName || user.username)}</strong>
+                <span class="dms-role-pill">${escapeHtml(String(user.role || "user").replace(/[_-]+/g, " "))}</span>
+                <div class="hint">${escapeHtml(user.username)}</div>
+              </div>
+              ${!user.builtIn && String(user.id) !== String(currentUser?.id || "")
+                ? `<button type="button" class="btn btn-sm btn-danger" data-team-user-id="${escapeHtml(user.id)}">Remove</button>`
+                : ""}
+            </div>
+          </article>`).join("")
+      : `<p class="hint">No team accounts yet. Create an account above, then assign its role or username in folder access settings.</p>`;
+
+    el.querySelectorAll("[data-team-user-id]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!confirm("Remove this team account? The user will no longer be able to sign in.")) return;
+        try {
+          await api(`/auth/users/${button.dataset.teamUserId}`, { method: "DELETE" });
+          await loadTeamUsers();
+          window.showToast?.("Team account removed");
+        } catch (err) {
+          window.showToast?.(err.message || "Could not remove account", true);
+        }
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<p class="hint">${escapeHtml(err.message || "Could not load team accounts")}</p>`;
+  }
+}
+
+function bindTeamUserForm() {
+  const form = document.getElementById("dmsTeamUserForm");
+  if (!form || form.dataset.bound === "1") return;
+  form.dataset.bound = "1";
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = document.getElementById("dmsTeamUserStatus");
+    const creds = document.getElementById("dmsTeamUserCreds");
+    const button = document.getElementById("dmsTeamUserSave");
+    if (status) {
+      status.textContent = "Creating account…";
+      status.className = "form-status";
+    }
+    if (button) button.disabled = true;
+    try {
+      const response = await api("/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: document.getElementById("dmsTeamName")?.value?.trim(),
+          username: document.getElementById("dmsTeamUsername")?.value?.trim(),
+          role: document.getElementById("dmsTeamRole")?.value || "user",
+          password: document.getElementById("dmsTeamPassword")?.value,
+        }),
+      });
+      if (status) {
+        status.textContent = response.message || "Account created.";
+        status.className = "form-status ok";
+      }
+      if (creds) {
+        creds.hidden = false;
+        creds.innerHTML = `<strong>Share these login details with the team member</strong>
+          <pre>Username: ${escapeHtml(response.user?.username)}
+Temporary password: ${escapeHtml(response.temporaryPassword)}
+Role: ${escapeHtml(response.user?.role)}</pre>
+          <p class="hint">You can now grant this account or its role access to selected folders.</p>`;
+      }
+      form.reset();
+      await loadTeamUsers();
+      window.showToast?.("Team account created");
+    } catch (err) {
+      if (status) {
+        status.textContent = err.message || "Could not create account";
+        status.className = "form-status error";
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+}
+
 export function loadDmsUsers() {
-  if (!isDmsSuperAdmin(getCurrentUser())) {
+  if (!isDmsAdmin(getCurrentUser())) {
     const root = document.getElementById("dmsUsersRoot");
     if (root) {
-      root.innerHTML = `<div class="content-card"><h2>Login &amp; system details</h2><p class="hint">Super Admin access required. Sign in as superadmin.</p></div>`;
+      root.innerHTML = `<div class="content-card"><h2>Manage team accounts</h2><p class="hint">Admin access required.</p></div>`;
     }
     return;
   }
-  bindForm();
-  loadCustomers();
+  const superAdmin = isDmsSuperAdmin(getCurrentUser());
+  const licenseCard = document.getElementById("dmsCustomerProvisioningCard");
+  const customersCard = document.getElementById("dmsCustomersCard");
+  const adminRole = document.getElementById("dmsTeamAdminRole");
+  if (licenseCard) licenseCard.hidden = !superAdmin;
+  if (customersCard) customersCard.hidden = !superAdmin;
+  if (adminRole) adminRole.hidden = !superAdmin;
+
+  bindTeamUserForm();
+  loadTeamUsers();
+  if (superAdmin) {
+    bindForm();
+    loadCustomers();
+  }
 }
 
 window.loadDmsUsers = loadDmsUsers;

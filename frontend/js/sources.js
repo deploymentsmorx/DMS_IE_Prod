@@ -55,6 +55,7 @@ let pendingGoogleEmail = "";
 let connectUsesGoogle = false;
 let pendingTypeId = "";
 let syncPollTimer = null;
+let editingConnectionId = "";
 
 const CONNECT_TIMEOUT_MS = 30000;
 const DISCONNECT_TIMEOUT_MS = 180000;
@@ -65,6 +66,13 @@ function esc(s) {
   d.textContent = s || "";
   return d.innerHTML;
 }
+
+function canManageFolderAccess() {
+  const role = String(getCurrentUser()?.role || "").toLowerCase();
+  return role === "admin" || role === "superadmin";
+}
+
+window.canManageFolderAccess = canManageFolderAccess;
 
 function resolveDocSource(typeId) {
   return sourceTypes.find((t) => t.id === typeId)?.docSource || typeId;
@@ -87,7 +95,7 @@ export function getConnectionsList() {
 }
 
 export function shouldPromptSourceConnect(sidebarSrc) {
-  return sidebarSrc !== "all" && !isSourceConnected(sidebarSrc);
+  return canManageFolderAccess() && sidebarSrc !== "all" && !isSourceConnected(sidebarSrc);
 }
 
 export function initSources() {
@@ -105,6 +113,11 @@ export function initSources() {
   document.getElementById("sourceModal")?.addEventListener("click", (e) => {
     if (e.target.id === "sourceModal") closeSourceModal();
   });
+  document.getElementById("closeFolderAccessModal")?.addEventListener("click", closeFolderAccessModal);
+  document.getElementById("folderAccessModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "folderAccessModal") closeFolderAccessModal();
+  });
+  document.getElementById("saveFolderAccessBtn")?.addEventListener("click", saveFolderAccess);
   return loadSourcesHub();
 }
 
@@ -154,6 +167,10 @@ function renderSourceGrid() {
       </div>`;
   }).join("");
 
+  if (!canManageFolderAccess()) {
+    grid.querySelectorAll(".source-connect-btn").forEach((btn) => btn.remove());
+  }
+
   grid.querySelectorAll(".source-connect-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -165,10 +182,17 @@ function renderSourceGrid() {
 function renderSidebarConnections() {
   const el = document.getElementById("sidebarConnections");
   const hint = document.getElementById("sidebarSourceHint");
+  const canManage = canManageFolderAccess();
+  document.getElementById("sidebarConnectBtn")?.classList.toggle("dms-hidden", !canManage);
   if (hint) {
     hint.textContent = connections.length
       ? `${connections.length} source${connections.length !== 1 ? "s" : ""} connected — documents are visible below.`
       : "No sources connected yet. Connect a source from the sidebar to import documents.";
+  }
+  if (hint && !canManage) {
+    hint.textContent = connections.length
+      ? `${connections.length} folder${connections.length !== 1 ? "s" : ""} available to your account.`
+      : "No folders are available to your account yet. Ask an Admin to grant access.";
   }
 
   document.querySelectorAll(".sidebar-group .nav-btn[data-src]").forEach((btn) => {
@@ -202,6 +226,36 @@ function renderSidebarConnections() {
         <button type="button" class="btn btn-sm btn-danger sidebar-disconnect" data-id="${esc(c.id)}" title="Disconnect">×</button>
       </div>`).join("")}`;
 
+  if (canManage) {
+    el.querySelectorAll(".sidebar-connection-item").forEach((item, index) => {
+      const connection = connections[index];
+      if (!connection) return;
+      item.classList.add("has-access-control");
+      if (connection.accessControl?.locked) {
+        const lockState = document.createElement("small");
+        lockState.textContent = "Locked";
+        item.querySelector("div")?.append(lockState);
+      }
+      const accessButton = document.createElement("button");
+      accessButton.type = "button";
+      accessButton.className = "btn btn-sm sidebar-access";
+      accessButton.textContent = "Access";
+      accessButton.dataset.id = connection.id;
+      item.append(accessButton);
+    });
+  } else {
+    el.querySelector("#disconnectAllSourcesBtn")?.remove();
+    el.querySelectorAll(".sidebar-disconnect").forEach((btn) => btn.remove());
+  }
+
+  el.querySelectorAll(".sidebar-access").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openFolderAccess(btn.dataset.id);
+    });
+  });
+
   el.querySelectorAll(".sidebar-disconnect").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -214,6 +268,83 @@ function renderSidebarConnections() {
     e.stopPropagation();
     disconnectAllSources();
   });
+}
+
+async function openFolderAccess(connectionId) {
+  if (!canManageFolderAccess()) {
+    showSourceToast("Admin or Super Admin access is required to manage folder access.", true);
+    return;
+  }
+  const connection = connections.find((item) => String(item.id) === String(connectionId));
+  if (!connection) return;
+
+  try {
+    const options = await api("/sources/access-options");
+    const access = connection.accessControl || { locked: true, allowedRoles: [], allowedUsers: [] };
+    const selectedRoles = new Set(access.allowedRoles || []);
+    const selectedUsers = new Set((access.allowedUsers || []).map(String));
+    const roleRows = (options.roles || []).map((role) => `
+      <label class="toggle-row">
+        <input type="checkbox" name="folderAccessRole" value="${esc(role.value)}" ${selectedRoles.has(role.value) ? "checked" : ""}/>
+        <span>${esc(role.label)}</span>
+      </label>`).join("");
+    const userRows = (options.users || []).map((user) => `
+      <label class="toggle-row">
+        <input type="checkbox" name="folderAccessUser" value="${esc(user.id)}" ${selectedUsers.has(String(user.id)) ? "checked" : ""}/>
+        <span>${esc(user.displayName || user.username)} <small>${esc(user.username)} · ${esc(user.role)}</small></span>
+      </label>`).join("");
+
+    document.getElementById("folderAccessTitle").textContent = `Folder access · ${connection.label || connection.type}`;
+    document.getElementById("folderAccessFields").innerHTML = `
+      <label class="toggle-row">
+        <input id="folderAccessLocked" type="checkbox" ${access.locked ? "checked" : ""}/>
+        <span><strong>Lock this folder</strong><small>Only selected roles or users can search, chat with, or open these documents.</small></span>
+      </label>
+      <fieldset id="folderAccessChoices" style="border:0;padding:0;margin:14px 0 0">
+        <div class="field"><strong>Allowed roles</strong>${roleRows || `<p class="hint">No roles are available yet.</p>`}</div>
+        <div class="field"><strong>Allowed users</strong>${userRows || `<p class="hint">No users are available yet.</p>`}</div>
+      </fieldset>`;
+
+    const locked = document.getElementById("folderAccessLocked");
+    const choices = document.getElementById("folderAccessChoices");
+    const syncDisabled = () => { choices.disabled = !locked.checked; };
+    locked.addEventListener("change", syncDisabled);
+    syncDisabled();
+    editingConnectionId = connection.id;
+    document.getElementById("folderAccessModal")?.classList.add("open");
+  } catch (err) {
+    showSourceToast(err.message || "Could not load folder access settings", true);
+  }
+}
+
+function closeFolderAccessModal() {
+  document.getElementById("folderAccessModal")?.classList.remove("open");
+  editingConnectionId = "";
+}
+
+async function saveFolderAccess() {
+  if (!editingConnectionId) return;
+  const button = document.getElementById("saveFolderAccessBtn");
+  if (button) button.disabled = true;
+  try {
+    const accessControl = {
+      locked: Boolean(document.getElementById("folderAccessLocked")?.checked),
+      allowedRoles: [...document.querySelectorAll('[name="folderAccessRole"]:checked')].map((input) => input.value),
+      allowedUsers: [...document.querySelectorAll('[name="folderAccessUser"]:checked')].map((input) => input.value),
+    };
+    await api(`/sources/${encodeURIComponent(editingConnectionId)}/access-control`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accessControl),
+    });
+    closeFolderAccessModal();
+    showSourceToast(accessControl.locked ? "Folder locked and access rules saved" : "Folder unlocked");
+    await loadSourcesHub();
+  } catch (err) {
+    showSourceToast(err.message || "Could not save folder access", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function startBackgroundSyncWatch() {
@@ -277,6 +408,10 @@ function renderActiveConnections() {
       <button class="btn btn-sm btn-danger" data-disconnect="${c.id}">Remove</button>
     </div>`).join("");
 
+  if (!canManageFolderAccess()) {
+    el.querySelectorAll("[data-sync], [data-disconnect]").forEach((button) => button.remove());
+  }
+
   el.querySelectorAll("[data-sync]").forEach((btn) => {
     btn.addEventListener("click", () => syncOne(btn.dataset.sync));
   });
@@ -333,6 +468,10 @@ function startGoogleSignIn() {
 }
 
 async function openConnectModal(typeId, options = {}) {
+  if (!canManageFolderAccess()) {
+    showSourceToast("Only Admin or Super Admin accounts can connect or sync folders.", true);
+    return;
+  }
   if (!sourceTypes.length) {
     try {
       await loadSourcesHub();
@@ -547,6 +686,13 @@ function pickLocalFolder() {
 async function uploadLocalFolderFiles(fileList, { connectionId, department, label } = {}) {
   const files = Array.from(fileList || []);
   if (!files.length) throw new Error("No files in folder");
+  if (files.length > 20) throw new Error("Choose a folder with no more than 20 files per upload.");
+  if (files.some((file) => file.size > 10 * 1024 * 1024)) {
+    throw new Error("Each file must be 10 MB or smaller for memory-only processing.");
+  }
+  if (files.reduce((total, file) => total + file.size, 0) > 100 * 1024 * 1024) {
+    throw new Error("Choose a folder with 100 MB or less of supported files per upload.");
+  }
 
   const folderLabel =
     files[0]?.webkitRelativePath?.split("/")?.[0] ||

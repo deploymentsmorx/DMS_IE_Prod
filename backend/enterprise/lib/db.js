@@ -2,12 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
+const volatileData = new Map();
 
 function filePath(name) {
   return path.join(DATA_DIR, name);
 }
 
 function read(name, fallback = null) {
+  if (volatileData.has(name)) return volatileData.get(name);
+  if (name === 'documents.json' || name === 'audit.json') return fallback;
   try {
     return JSON.parse(fs.readFileSync(filePath(name), 'utf8'));
   } catch {
@@ -16,7 +19,7 @@ function read(name, fallback = null) {
 }
 
 function write(name, data) {
-  fs.writeFileSync(filePath(name), JSON.stringify(data, null, 2), 'utf8');
+  volatileData.set(name, data);
 }
 
 function appendAudit(entry) {

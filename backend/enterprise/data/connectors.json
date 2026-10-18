@@ -11,7 +11,6 @@
   { "id": "jira", "name": "Jira", "type": "collab", "status": "ready", "documents": 0 },
   { "id": "outlook", "name": "Outlook", "type": "email", "status": "ready", "documents": 0 },
   { "id": "gmail", "name": "Gmail", "type": "email", "status": "ready", "documents": 0 },
-  { "id": "s3", "name": "Amazon S3", "type": "storage", "status": "ready", "documents": 0 },
   { "id": "azure-blob", "name": "Azure Blob", "type": "storage", "status": "ready", "documents": 0 },
   { "id": "postgres", "name": "PostgreSQL", "type": "database", "status": "ready", "documents": 0 },
   { "id": "mysql", "name": "MySQL", "type": "database", "status": "ready", "documents": 0 },

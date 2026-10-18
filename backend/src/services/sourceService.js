@@ -6,7 +6,12 @@ const { syncFromFtp } = require("./connectors/ftpConnector");
 const { syncFromSftp } = require("./connectors/sftpConnector");
 const { CLOUD_SYNC } = require("./connectors/cloudConnector");
 const { resolveAutoConfig, getOneDriveLocalPaths } = require("./sourceAutoConfigService");
-const { filterAccessibleDocuments, buildStats } = require("./sourceAccessService");
+const {
+  filterAccessibleDocuments,
+  filterAccessibleConnections,
+  buildStats,
+} = require("./sourceAccessService");
+const authService = require("./authService");
 const { ingestBrowserFiles } = require("./folderService");
 const db = require("./dbService");
 const gov = require("./enterpriseGovernanceService");
@@ -93,11 +98,21 @@ function isTypeConfigured(typeId) {
   return t.envKeys.some((k) => process.env[k]);
 }
 
-function getConnections() {
-  return store.getConnectedSources().map((c) => ({
-    ...c,
-    config: sanitizeConfig(c.config),
-  }));
+function getConnections(user) {
+  const visible = filterAccessibleConnections(store.getConnectedSources(), user);
+  return visible.map((c) => {
+    const result = { ...c, config: sanitizeConfig(c.config) };
+    if (authService.isAdmin(user)) {
+      result.accessControl = c.accessControl || {
+        locked: true,
+        allowedRoles: [],
+        allowedUsers: [],
+      };
+    } else {
+      delete result.accessControl;
+    }
+    return result;
+  });
 }
 
 async function connect(typeId, config = {}, label, options = {}) {
@@ -194,11 +209,11 @@ async function syncConnection(sourceId) {
   if (PATH_TYPES.has(type)) {
     result = await syncFromPath(type, config, sourceId);
   } else if (type === "ftp") {
-    result = await syncFromFtp(config);
+    result = await syncFromFtp(config, sourceId);
   } else if (type === "sftp") {
-    result = await syncFromSftp(config);
+    result = await syncFromSftp(config, sourceId);
   } else if (CLOUD_SYNC[type]) {
-    result = await CLOUD_SYNC[type](config);
+    result = await CLOUD_SYNC[type](config, sourceId);
   } else {
     throw new Error(`No sync handler for ${type}`);
   }
@@ -237,9 +252,7 @@ function disconnect(sourceId) {
     .filter((c) => String(c.id) !== String(sourceId))
     .some((c) => c.type === connType);
 
-  if (db.isUsingNeon()) {
-    db.deleteByConnectionId(sourceId).catch(() => {});
-  }
+  db.deleteByConnectionId(sourceId).catch(() => {});
 
   if (stillConnectedAfter) {
     return store.removeConnectedSource(sourceId);
@@ -247,9 +260,7 @@ function disconnect(sourceId) {
 
   const typeDef = getSourceType(connType);
   const docSource = typeDef?.docSource || connType;
-  if (db.isUsingNeon()) {
-    db.deleteBySource(docSource).catch(() => {});
-  }
+  db.deleteBySource(docSource).catch(() => {});
   return store.removeConnectedSourceAndPurgeDocs(sourceId, docSource);
 }
 
@@ -275,11 +286,11 @@ function sanitizeConfig(config) {
   return safe;
 }
 
-function getSourceStats() {
-  const docs = store.getDocuments();
-  const stats = buildStats(docs);
+function getSourceStats(user) {
+  const docs = filterAccessibleDocuments(store.getDocuments(), user);
+  const stats = buildStats(docs, user);
   return {
-    connections: store.getConnectedSources().length,
+    connections: filterAccessibleConnections(store.getConnectedSources(), user).length,
     bySource: stats.bySource,
     types: listSourceTypes().length,
   };
@@ -303,7 +314,7 @@ async function connectLocalFolderUpload(files, config = {}, label) {
 
   const connection = store.addConnectedSource({
     type: "local_directory",
-    label: label || "Local Directory",
+    label: label || folderLabel,
     config: resolvedConfig,
     status: "syncing",
   });
@@ -347,7 +358,7 @@ async function syncLocalFolderUpload(sourceId, files) {
   if (!files?.length) throw new Error("No files selected from your folder");
 
   store.purgeDocumentsForConnection(sourceId);
-  if (db.isUsingNeon()) await db.deleteByConnectionId(sourceId);
+  await db.deleteByConnectionId(sourceId);
 
   const folderLabel =
     conn.config?.folderLabel ||

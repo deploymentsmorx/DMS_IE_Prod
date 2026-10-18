@@ -39,17 +39,11 @@ Response includes `reply` and `references[]` with match percentages and URLs.
 
 Requires `OPENAI_API_KEY` in `.env`. Falls back to rule-based answers if unset.
 
-## NeonDB
+## Document privacy and storage
 
-```bash
-# .env
-DATABASE_URL=postgres://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
+Document files, extracted search content, license records, connected sources, and folder rules are processed in memory only. The DMS does not connect to Neon or AWS S3, and uploaded document bytes are not written to disk. Local and network folders are read in place; browser and FTP/SFTP uploads are held in memory while the server is running. Only local user account credential records are persisted to disk. The in-memory index and source sessions clear when the server restarts; reconnect and sync sources afterward.
 
-npm run db:init
-npm start
-```
-
-Schema auto-creates on startup. Seed data loads on first run.
+The index, folder connections, folder access rules, and license records are cleared when the server restarts, so reconnect and sync sources after a restart. Local user account credential records are the only application data written to the backend data directory.
 
 ## Google Drive Sync
 

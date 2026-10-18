@@ -15,7 +15,7 @@ router.post("/", async (req, res) => {
     const store = require("../services/relationalStore");
     const connections = store.getConnectedSources();
     const connectedDocs = connections.length
-      ? filterAccessibleDocuments(await db.getAllDocuments())
+      ? filterAccessibleDocuments(await db.getAllDocuments(), req.user)
       : [];
     const allDocs = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
     if (!allDocs.length) {

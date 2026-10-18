@@ -43,7 +43,7 @@ router.get("/suggest", async (req, res) => {
   try {
     const { q = "", scope = "all" } = req.query;
     const connections = store.getConnectedSources();
-    const searchDocs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments()) : [];
+    const searchDocs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments(), req.user) : [];
     const saved = aux.load?.()?.savedSearches || [];
     const versionDocs = versionStore.getDocuments().map((d) => ({
       title: d.name,
@@ -68,7 +68,7 @@ router.post("/search", async (req, res) => {
     const { q } = req.body;
     if (!q) return res.status(400).json({ error: "q is required" });
     const connections = store.getConnectedSources();
-    const docs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments()) : [];
+    const docs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments(), req.user) : [];
     const result = await aiSearch(q, docs);
     res.json(result);
   } catch (err) {
@@ -128,7 +128,7 @@ router.post("/metadata", async (req, res) => {
 router.get("/insights", async (req, res) => {
   try {
     const connections = store.getConnectedSources();
-    const searchDocs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments()) : [];
+    const searchDocs = connections.length ? filterAccessibleDocuments(await db.getAllDocuments(), req.user) : [];
     res.json(buildInsights(searchDocs, req.user || {}));
   } catch (err) {
     res.status(500).json({ error: err.message });

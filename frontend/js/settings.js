@@ -2,7 +2,7 @@ import { applyTheme, watchSystemTheme } from "./theme.js";
 import { languageOptionsHtml } from "./languages.js";
 import { api } from "./api.js";
 import { getCurrentUser } from "./auth.js";
-import { isDmsSuperAdmin, syncSuperAdminUi } from "./superAdmin.js";
+import { isDmsAdmin, isDmsSuperAdmin, syncSuperAdminUi } from "./superAdmin.js";
 
 export function initSettings(chat) {
   const overlay = document.getElementById("settingsModal");
@@ -131,9 +131,8 @@ export function initSettings(chat) {
         </div>`,
 
       users: `
-        <h2>Login &amp; system details</h2>
-        <p class="setting-desc" style="margin-bottom:14px">For customer EXE security (license, install password, Device ID, Activate), use <strong>Administration → Login &amp; system details</strong>. Username/password alone is not enough for a locked customer PC.</p>
-        <p class="setting-desc" style="margin-bottom:14px">Optional: create a simple internal login below (not device-locked). Prefer the Administration customer form for customer sites.</p>
+        <h2>Team accounts</h2>
+        <p class="setting-desc" style="margin-bottom:14px">Create team logins here, then use each folder's Access settings to grant access by role or by person.</p>
         <form id="addLoginForm" class="add-login-form">
           <div class="field">
             <label for="loginDetailName">Full name</label>
@@ -147,8 +146,10 @@ export function initSettings(chat) {
             <label for="loginDetailRole">Role</label>
             <select id="loginDetailRole">
               <option value="user">User</option>
-              <option value="admin">Admin</option>
-              <option value="superadmin">Super Admin</option>
+              <option value="engineer">Engineer</option>
+              <option value="team_lead">Team Lead</option>
+              <option value="manager">Manager</option>
+              ${isDmsSuperAdmin(getCurrentUser()) ? `<option value="admin">Admin</option>` : ""}
             </select>
           </div>
           <div class="field">
@@ -163,8 +164,8 @@ export function initSettings(chat) {
         <div id="loginDetailUsers" class="settings-chat-list"><p class="hint">Loading…</p></div>`,
     };
 
-    if (section === "users" && !isDmsSuperAdmin(getCurrentUser())) {
-      panel.innerHTML = `<h2>Login details</h2><p class="hint">Super Admin access required.</p>`;
+    if (section === "users" && !isDmsAdmin(getCurrentUser())) {
+      panel.innerHTML = `<h2>Login details</h2><p class="hint">Admin access required.</p>`;
       return;
     }
 
@@ -180,6 +181,7 @@ export function initSettings(chat) {
     try {
       const res = await api("/auth/users");
       const users = res.users || [];
+      const currentUser = getCurrentUser();
       el.innerHTML = users.length
         ? users.map((u) => `
             <div class="settings-chat-item">
@@ -187,6 +189,8 @@ export function initSettings(chat) {
               <span class="chat-item-date">${escapeHtml(u.username)} · ${escapeHtml(u.role)}</span>
               ${u.builtIn
                 ? `<span class="chat-item-date">Built-in</span>`
+              : String(u.id) === String(currentUser?.id || "")
+                ? `<span class="chat-item-date">You</span>`
                 : `<button type="button" class="chat-item-del" data-user-id="${escapeHtml(u.id)}">Remove</button>`}
             </div>`).join("")
         : "<p class='hint'>No users yet</p>";

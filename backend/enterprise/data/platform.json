@@ -143,7 +143,7 @@
         "Local Directory", "Network Drive", "NAS Storage",
         "OneDrive", "Google Drive", "SharePoint", "Dropbox", "Box",
         "Slack", "Confluence", "Jira",
-        "Outlook", "Gmail", "S3", "Azure Blob", "Snowflake",
+        "Outlook", "Gmail", "Azure Blob", "Snowflake",
         "PostgreSQL", "MySQL", "SQL Server", "Oracle DB", "MongoDB",
         "Elasticsearch", "SAP", "Salesforce", "ServiceNow"
       ]

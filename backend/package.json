@@ -1,7 +1,7 @@
 {
   "name": "docsearch-backend",
   "version": "1.0.0",
-  "description": "Production document search API — NeonDB, Google Drive, OneDrive, GPT chat",
+  "description": "Document search API with memory-only document indexing",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -15,7 +15,6 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
     "basic-ftp": "^5.0.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

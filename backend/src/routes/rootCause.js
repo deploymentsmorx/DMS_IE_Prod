@@ -8,10 +8,10 @@ router.post("/analyze", async (req, res) => {
     if (!issue && !defectId) {
       return res.status(400).json({ error: "issue or defectId is required" });
     }
-    const result = await analyzeRootCause(issue, defectId);
+    const result = await analyzeRootCause(issue, defectId, req.user);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.message === "Defect not found" ? 404 : 500).json({ error: err.message });
   }
 });
 

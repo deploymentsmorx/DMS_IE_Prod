@@ -1,7 +1,7 @@
 const store = require("../relationalStore");
 const db = require("../dbService");
 
-async function syncGoogleDrive(config) {
+async function syncGoogleDrive(config, connectionId) {
   let docs = [];
 
   if (config?.oauthTokens) {
@@ -20,7 +20,7 @@ async function syncGoogleDrive(config) {
 
   const imported = [];
   for (const doc of docs) {
-    imported.push(await db.persistDocument({ ...doc, source: "google_drive" }));
+    imported.push(await db.persistDocument({ ...doc, source: "google_drive", connectionId }));
   }
   return {
     imported: imported.length,
@@ -29,7 +29,7 @@ async function syncGoogleDrive(config) {
   };
 }
 
-async function syncOneDrive(config) {
+async function syncOneDrive(config, connectionId) {
   const { syncOneDriveGraph, syncOneDriveLocal } = require("../sync/oneDrive");
   const userEmail = config.otpEmail || config.authUsername;
   let docs = [];
@@ -54,7 +54,7 @@ async function syncOneDrive(config) {
   }
 
   if (!docs.length) {
-    const local = await syncOneDriveLocal(config);
+    const local = await syncOneDriveLocal({ ...config, connectionId });
     if (local.documents?.length) {
       return {
         imported: local.imported,
@@ -74,7 +74,7 @@ async function syncOneDrive(config) {
 
   const imported = [];
   for (const doc of docs) {
-    imported.push(await db.persistDocument({ ...doc, source: "onedrive" }));
+    imported.push(await db.persistDocument({ ...doc, source: "onedrive", connectionId }));
   }
   return { imported: imported.length, documents: imported, ...meta };
 }

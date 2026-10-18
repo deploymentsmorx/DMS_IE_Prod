@@ -1,12 +1,9 @@
-const fs = require("fs");
 const path = require("path");
-
-const STORE_PATH = path.join(__dirname, "../data/store.json");
-const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
 const DEPARTMENTS = ["finance", "hr", "project", "admin", "engineering", "logistics", "other"];
 
 let store = null;
+const transientFiles = new Map();
 let nextIds = { doc: 9, revision: 1, node: 1, edge: 1, defect: 1, folder: 1, source: 1 };
 
 function defaultStore() {
@@ -21,117 +18,14 @@ function defaultStore() {
   };
 }
 
-function purgeSeedData() {
-  if (!store) return;
-  let changed = false;
-
-  if (store.defects?.length) {
-    store.defects = [];
-    changed = true;
-  }
-
-  const seedLabels = new Set(["Site A Bridge", "Pump P-204"]);
-  if ((store.graphNodes || []).some((n) => seedLabels.has(n.label))) {
-    store.graphNodes = [];
-    store.graphEdges = [];
-    changed = true;
-  }
-
-  if (changed) saveStore();
-}
-
-const REMOVED_SOURCE_TYPES = new Set([
-  "teams",
-  "google_drive",
-  "smb",
-  "nas",
-  "dropbox",
-  "ftp",
-  "sftp",
-  "sap",
-]);
-
-function purgeRemovedSources() {
-  if (!store?.connectedSources?.length) return;
-  const { getSourceType } = require("../config/sourceRegistry");
-  const before = store.connectedSources.length;
-  const kept = [];
-  for (const conn of store.connectedSources) {
-    if (REMOVED_SOURCE_TYPES.has(conn.type) || !getSourceType(conn.type)) {
-      const docSource = getSourceType(conn.type)?.docSource || conn.type;
-      store.documents = (store.documents || []).filter((d) => d.source !== docSource);
-      continue;
-    }
-    kept.push(conn);
-  }
-  if (kept.length !== before) {
-    store.connectedSources = kept;
-    saveStore();
-  }
-}
-
-function loadStore() {
-  try {
-    if (fs.existsSync(STORE_PATH)) {
-      store = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
-      purgeDemoDocuments();
-      purgeSeedData();
-      purgeRemovedSources();
-      const maxDoc = Math.max(0, ...store.documents.map((d) => Number(d.id) || 0));
-      nextIds.doc = maxDoc + 1;
-      const sourceIds = (store.connectedSources || [])
-        .map((s) => Number(s.id))
-        .filter((n) => !Number.isNaN(n));
-      nextIds.source = sourceIds.length ? Math.max(...sourceIds) + 1 : 1;
-      return;
-    }
-  } catch {
-    /* fresh start */
-  }
+function initializeMemoryStore() {
   store = defaultStore();
-  saveStore();
+  transientFiles.clear();
+  nextIds = { doc: 1, revision: 1, node: 1, edge: 1, defect: 1, folder: 1, source: 1 };
 }
 
 function saveStore() {
-  const dir = path.dirname(STORE_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
-}
-
-function purgeDemoDocuments() {
-  if (!store?.documents?.length && !store?.connectedSources?.length) return;
-  const { isDemoDocument } = require("./documentFilterService");
-  const { getSourceType } = require("../config/sourceRegistry");
-
-  if (store.documents?.length) {
-    const before = store.documents.length;
-    store.documents = store.documents.filter((d) => !isDemoDocument(d));
-    if (store.documents.length !== before) {
-      reconcileConnectionCounts(getSourceType, isDemoDocument);
-      saveStore();
-    }
-  }
-}
-
-function reconcileConnectionCounts(getSourceType, isDemoDocument) {
-  if (!store?.connectedSources?.length) return;
-  let changed = false;
-  for (const conn of store.connectedSources) {
-    const docSource = getSourceType(conn.type)?.docSource || conn.type;
-    const count = (store.documents || []).filter(
-      (d) => d.source === docSource && !isDemoDocument(d)
-    ).length;
-    if (conn.documentCount !== count) {
-      conn.documentCount = count;
-      changed = true;
-    }
-  }
-  if (changed) saveStore();
-}
-
-function ensureUploadsDir() {
-  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  return UPLOADS_DIR;
+  // Document index, folder settings, and source sessions remain in memory only.
 }
 
 function guessDepartment(nameOrPath) {
@@ -172,6 +66,7 @@ function mapDocument(d) {
     size: d.size || "",
     folderPath: d.folderPath || "",
     filePath: d.filePath || null,
+    connectionId: d.connectionId ? String(d.connectionId) : null,
     revision: d.revision || 1,
     parentDocId: d.parentDocId || null,
     addedAt: d.addedAt || new Date().toISOString(),
@@ -266,6 +161,7 @@ function deleteDocument(id) {
   const idx = store.documents.findIndex((d) => String(d.id) === String(id));
   if (idx === -1) return false;
   store.documents.splice(idx, 1);
+  transientFiles.delete(String(id));
   saveStore();
   return true;
 }
@@ -273,6 +169,9 @@ function deleteDocument(id) {
 function deleteDocumentsBySource(docSource) {
   if (!docSource) return 0;
   const before = store.documents.length;
+  for (const doc of store.documents) {
+    if (doc.source === docSource) transientFiles.delete(String(doc.id));
+  }
   store.documents = store.documents.filter((d) => d.source !== docSource);
   const removed = before - store.documents.length;
   if (removed > 0) saveStore();
@@ -287,6 +186,9 @@ function clearConnectedSources() {
 function purgeSourcesAndConnections(docSources, connectionCount, docCountBefore) {
   const sources = new Set(docSources || []);
   const before = docCountBefore ?? store.documents.length;
+  for (const doc of store.documents) {
+    if (sources.has(doc.source)) transientFiles.delete(String(doc.id));
+  }
   store.documents = store.documents.filter((d) => !sources.has(d.source));
   store.connectedSources = [];
   saveStore();
@@ -302,8 +204,10 @@ function getRevisions(docId) {
     .sort((a, b) => b.revision - a.revision);
 }
 
-function getRevisionCount() {
-  return (store.revisions || []).length;
+function getRevisionCount(allowedDocumentIds) {
+  if (!allowedDocumentIds) return (store.revisions || []).length;
+  const allowed = new Set([...allowedDocumentIds].map(String));
+  return (store.revisions || []).filter((revision) => allowed.has(String(revision.documentId))).length;
 }
 
 function getGraph() {
@@ -354,8 +258,11 @@ function addDefect(data) {
   return defect;
 }
 
-function getDefectAnalytics() {
-  const defects = store.defects;
+function getDefectAnalytics(allowedDocumentIds) {
+  const allowed = allowedDocumentIds ? new Set([...allowedDocumentIds].map(String)) : null;
+  const defects = allowed
+    ? store.defects.filter((defect) => !defect.documentId || allowed.has(String(defect.documentId)))
+    : store.defects;
   const bySeverity = {};
   const byStatus = {};
   const byProject = {};
@@ -383,16 +290,24 @@ function getDefectAnalytics() {
 
 function addConnectedFolder(data) {
   const folder = {
-    id: String(nextIds.folder++),
+    id: `folder_${nextIds.folder++}`,
     path: data.path,
     department: data.department || guessDepartment(data.path),
     label: data.label || path.basename(data.path),
     connectedAt: new Date().toISOString(),
     fileCount: data.fileCount || 0,
+    accessControl: data.accessControl || {
+      locked: true,
+      allowedRoles: [],
+      allowedUsers: [],
+    },
   };
   const existing = store.connectedFolders.find((f) => f.path === data.path);
   if (existing) {
-    Object.assign(existing, folder);
+    Object.assign(existing, folder, {
+      id: existing.id,
+      accessControl: existing.accessControl || folder.accessControl,
+    });
     saveStore();
     return existing;
   }
@@ -416,6 +331,11 @@ function addConnectedSource(data) {
     lastSync: data.lastSync || null,
     lastError: data.lastError || null,
     connectedAt: new Date().toISOString(),
+    accessControl: data.accessControl || {
+      locked: true,
+      allowedRoles: [],
+      allowedUsers: [],
+    },
   };
   store.connectedSources = store.connectedSources || [];
   store.connectedSources.push(src);
@@ -429,6 +349,14 @@ function getConnectedSources() {
 
 function getConnectedSource(id) {
   return (store.connectedSources || []).find((s) => String(s.id) === String(id)) || null;
+}
+
+function updateConnectedFolder(id, data) {
+  const idx = (store.connectedFolders || []).findIndex((f) => String(f.id) === String(id));
+  if (idx === -1) return null;
+  store.connectedFolders[idx] = { ...store.connectedFolders[idx], ...data, id: String(id) };
+  saveStore();
+  return store.connectedFolders[idx];
 }
 
 function updateConnectedSource(id, data) {
@@ -462,20 +390,32 @@ function removeConnectedSourceAndPurgeDocs(id, docSource) {
 }
 
 function purgeDocumentsForConnection(connectionId) {
+  const removed = store.documents.filter((d) => String(d.connectionId || "") === String(connectionId));
+  for (const doc of removed) transientFiles.delete(String(doc.id));
   store.documents = store.documents.filter(
     (d) => String(d.connectionId || "") !== String(connectionId)
   );
 }
 
+function putTransientFile(id, file) {
+  transientFiles.set(String(id), {
+    buffer: Buffer.from(file.buffer),
+    originalName: String(file.originalName || "document"),
+    mimeType: String(file.mimeType || "application/octet-stream"),
+  });
+}
+
+function getTransientFile(id) {
+  return transientFiles.get(String(id)) || null;
+}
+
 function initStore() {
-  loadStore();
+  initializeMemoryStore();
   if (!store.connectedSources) store.connectedSources = [];
-  ensureUploadsDir();
 }
 
 module.exports = {
   DEPARTMENTS,
-  UPLOADS_DIR,
   initStore,
   saveStore,
   guessDepartment,
@@ -500,6 +440,7 @@ module.exports = {
   getDefectAnalytics,
   addConnectedFolder,
   getConnectedFolders,
+  updateConnectedFolder,
   addConnectedSource,
   getConnectedSources,
   getConnectedSource,
@@ -507,5 +448,6 @@ module.exports = {
   removeConnectedSource,
   removeConnectedSourceAndPurgeDocs,
   purgeDocumentsForConnection,
-  ensureUploadsDir,
+  putTransientFile,
+  getTransientFile,
 };

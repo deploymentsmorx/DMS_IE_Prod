@@ -1,11 +1,10 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
 
-const DOCS_DIR = path.join(__dirname, '..', 'documents');
 const DOCUMENTS_FILE = 'documents.json';
 const AUTHORS_FILE = 'authors.json';
+const versionContents = new Map();
+const originalFiles = new Map();
 
 function readJson(file, fallback) {
   return db.read(file, fallback);
@@ -16,22 +15,18 @@ function writeJson(file, data) {
 }
 
 function docDir(docId) {
-  return path.join(DOCS_DIR, String(docId));
+  return String(docId);
 }
 
 function versionPath(docId, versionId) {
-  return path.join(docDir(docId), `${versionId}.txt`);
+  return `${docId}:${versionId}`;
 }
 
 function filePath(docId) {
-  return path.join(docDir(docId), 'current');
+  return `${docId}:current`;
 }
 
-function ensureDocDir(docId) {
-  const dir = docDir(docId);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
+function ensureDocDir(docId) { return docDir(docId); }
 
 function getAuthors() {
   return readJson(AUTHORS_FILE, []);
@@ -46,15 +41,38 @@ function saveDocuments(docs) {
 }
 
 function readVersionContent(docId, versionId) {
-  const file = versionPath(docId, versionId);
-  if (!fs.existsSync(file)) return '';
-  return fs.readFileSync(file, 'utf8');
+  return versionContents.get(versionPath(docId, versionId)) || '';
 }
 
 function writeVersionContent(docId, versionId, content) {
-  ensureDocDir(docId);
-  fs.writeFileSync(versionPath(docId, versionId), content, 'utf8');
-  fs.writeFileSync(filePath(docId), content, 'utf8');
+  versionContents.set(versionPath(docId, versionId), String(content || ''));
+  versionContents.set(filePath(docId), String(content || ''));
+}
+
+function saveOriginalFile(docId, buffer, originalName) {
+  if (!Buffer.isBuffer(buffer)) return;
+  originalFiles.set(String(docId), {
+    buffer: Buffer.from(buffer),
+    originalName: String(originalName || 'document'),
+  });
+}
+
+function getOriginalFile(docId) {
+  return originalFiles.get(String(docId)) || null;
+}
+
+function deleteDocument(docId, userId) {
+  const docs = getDocuments();
+  const index = docs.findIndex((doc) => doc.id === Number(docId));
+  if (index < 0) return null;
+  const [removed] = docs.splice(index, 1);
+  saveDocuments(docs);
+  originalFiles.delete(String(docId));
+  for (const key of versionContents.keys()) {
+    if (key.startsWith(`${docId}:`)) versionContents.delete(key);
+  }
+  db.appendAudit({ action: 'document_deleted', userId, documentId: docId, name: removed.name });
+  return removed;
 }
 
 function enrichDocument(doc) {
@@ -368,6 +386,9 @@ module.exports = {
   aiQuery,
   readVersionContent,
   writeVersionContent,
+  saveOriginalFile,
+  getOriginalFile,
+  deleteDocument,
   ensureDocDir,
   docDir,
 };

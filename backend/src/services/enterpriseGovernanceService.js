@@ -1,9 +1,4 @@
-const fs = require("fs");
-const path = require("path");
-
-const GOV_PATH = path.join(__dirname, "../data/enterprise-governance.json");
-
-const EMPTY_STORE = {
+const state = {
   policies: [],
   retentionRules: [],
   legalHolds: [],
@@ -11,27 +6,8 @@ const EMPTY_STORE = {
   nextId: 1,
 };
 
-function load() {
-  try {
-    const data = JSON.parse(fs.readFileSync(GOV_PATH, "utf8"));
-    return {
-      ...EMPTY_STORE,
-      ...data,
-      policies: Array.isArray(data.policies) ? data.policies : [],
-      retentionRules: Array.isArray(data.retentionRules) ? data.retentionRules : [],
-      legalHolds: Array.isArray(data.legalHolds) ? data.legalHolds : [],
-      workflows: Array.isArray(data.workflows) ? data.workflows : [],
-      nextId: data.nextId || 1,
-    };
-  } catch {
-    save(EMPTY_STORE);
-    return { ...EMPTY_STORE };
-  }
-}
-
-function save(data) {
-  fs.writeFileSync(GOV_PATH, JSON.stringify(data, null, 2), "utf8");
-}
+function load() { return state; }
+function save(_data) { /* Governance settings are memory-only. */ }
 
 function nextId(data, prefix) {
   data.nextId = (data.nextId || 10) + 1;

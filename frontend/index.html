@@ -389,7 +389,7 @@
       <button type="button" class="dms-module-btn" data-dms-module="governance">Enterprise Governance</button>
       <button type="button" class="dms-module-btn" data-dms-module="enterprise">Enterprise Suite</button>
       <button type="button" class="dms-module-btn" data-dms-module="guide">How to use</button>
-      <button type="button" class="dms-module-btn" data-dms-module="users" id="dmsUsersModuleBtn" hidden>Login &amp; user details</button>
+      <button type="button" class="dms-module-btn" data-dms-module="users" id="dmsUsersModuleBtn" hidden>Team access</button>
     </div>
 
     <div class="sidebar-group" id="adminSidebarGroup" hidden>
@@ -653,12 +653,45 @@
     <div class="page-header">
       <div class="page-header-text">
         <div class="breadcrumb">ADSE <span>/</span> <span>Administration</span></div>
-        <h1>Login &amp; system details</h1>
-        <p>Fill one form to add organisation, license, device, and user — same idea as Autoballoon. Customer Activates, then signs in on the approved PC only.</p>
+        <h1>Team accounts &amp; access</h1>
+        <p>Create team logins, then grant each role or selected person access to the folders they need.</p>
       </div>
     </div>
     <div id="dmsUsersRoot" class="dms-users-layout">
-      <div class="content-card">
+      <div class="content-card" id="dmsTeamUsersCard">
+        <h2>Manage team accounts</h2>
+        <p class="hint">Create a login for each team member. Then open a folder's Access settings to allow the account or its role to view that folder's documents.</p>
+        <form id="dmsTeamUserForm" class="add-login-form">
+          <div class="field">
+            <label for="dmsTeamName">Full name</label>
+            <input id="dmsTeamName" required minlength="2" placeholder="e.g. Asha Sharma"/>
+          </div>
+          <div class="field">
+            <label for="dmsTeamUsername">Username or email</label>
+            <input id="dmsTeamUsername" required minlength="2" autocomplete="off" placeholder="e.g. asha@example.com"/>
+          </div>
+          <div class="field">
+            <label for="dmsTeamRole">Role</label>
+            <select id="dmsTeamRole">
+              <option value="user">User</option>
+              <option value="engineer">Engineer</option>
+              <option value="team_lead">Team Lead</option>
+              <option value="manager">Manager</option>
+              <option value="admin" id="dmsTeamAdminRole" hidden>Admin</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="dmsTeamPassword">Temporary password</label>
+            <input id="dmsTeamPassword" type="password" required minlength="6" autocomplete="new-password"/>
+          </div>
+          <div id="dmsTeamUserStatus" class="form-status" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary" id="dmsTeamUserSave">Create account</button>
+        </form>
+        <div id="dmsTeamUserCreds" class="credentials-box" hidden></div>
+        <h3 style="margin-top:20px">Team accounts</h3>
+        <div id="dmsTeamUserTable"><p class="hint">Loading accounts…</p></div>
+      </div>
+      <div class="content-card" id="dmsCustomerProvisioningCard">
         <h2>Add customer / engineer</h2>
         <form id="dmsAddCustomerForm" class="add-login-form">
           <div class="field">
@@ -695,8 +728,10 @@
             <label for="dmsEngRole">Role</label>
             <select id="dmsEngRole">
               <option value="user">User</option>
+              <option value="engineer">Engineer</option>
+              <option value="team_lead">Team Lead</option>
+              <option value="manager">Manager</option>
               <option value="admin" selected>Admin</option>
-              <option value="superadmin">Super Admin</option>
             </select>
           </div>
           <div class="field">
@@ -708,7 +743,7 @@
         </form>
         <div id="dmsUserCreds" class="credentials-box" hidden></div>
       </div>
-      <div class="content-card">
+      <div class="content-card" id="dmsCustomersCard">
         <h2>Licensed customers</h2>
         <div id="dmsUsersTable"><p class="hint">Loading…</p></div>
       </div>
@@ -851,6 +886,18 @@
       <button class="btn hidden" type="button" id="sourceConnectBackBtn">← Back</button>
       <button class="btn" id="closeSourceModal">Cancel</button>
       <button type="button" class="btn btn-primary" id="sourceConnectBtn">Connect</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="folderAccessModal">
+  <div class="modal source-connect-modal">
+    <h2 id="folderAccessTitle">Folder access</h2>
+    <p class="hint">New folders start locked. Select roles or users to grant access. Admins and Super Admins can always manage and access folders.</p>
+    <div id="folderAccessFields"></div>
+    <div class="modal-footer">
+      <button class="btn" type="button" id="closeFolderAccessModal">Cancel</button>
+      <button class="btn btn-primary" type="button" id="saveFolderAccessBtn">Save access</button>
     </div>
   </div>
 </div>

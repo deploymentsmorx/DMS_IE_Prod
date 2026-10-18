@@ -3,7 +3,7 @@ const { walkDir, ingestFile } = require("../folderService");
 const store = require("../relationalStore");
 const { getDefaultLocalPaths } = require("../sourceAutoConfigService");
 
-async function scanPath(sourceType, folderPath, deptDefault) {
+async function scanPath(sourceType, folderPath, deptDefault, connectionId) {
   const isUnc = folderPath.startsWith("\\\\") || folderPath.startsWith("//");
   const resolved = isUnc
     ? folderPath.replace(/\//g, "\\")
@@ -15,7 +15,6 @@ async function scanPath(sourceType, folderPath, deptDefault) {
   const files = walkDir(resolved, [], { maxFiles: 5000 });
   const imported = [];
   const seen = new Set();
-  const localOnly = Boolean(sourceType === "local_directory");
 
   for (const file of files) {
     const key = file.toLowerCase();
@@ -26,8 +25,9 @@ async function scanPath(sourceType, folderPath, deptDefault) {
       department: store.guessDepartment(file) !== "other" ? store.guessDepartment(file) : dept,
       folderPath: resolved,
       source: sourceType === "local_directory" ? "local" : sourceType,
-      keepInPlace: localOnly,
-      localOnly,
+      keepInPlace: true,
+      localOnly: true,
+      connectionId,
       deferSave: true,
     });
     imported.push(doc);
@@ -60,7 +60,7 @@ async function syncFromPath(sourceType, config, sourceId) {
 
   for (const folderPath of paths) {
     try {
-      const result = await scanPath(sourceType, folderPath, dept);
+      const result = await scanPath(sourceType, folderPath, dept, sourceId);
       allImported.push(...result.imported);
       scanned.push({ path: result.resolved, files: result.files, imported: result.imported.length });
     } catch (err) {

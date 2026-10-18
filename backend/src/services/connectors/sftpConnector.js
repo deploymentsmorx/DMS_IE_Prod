@@ -1,7 +1,6 @@
-const fs = require("fs");
 const path = require("path");
-const os = require("os");
-const { ingestFile } = require("../folderService");
+const fs = require("fs");
+const { ingestBuffer } = require("../folderService");
 const store = require("../relationalStore");
 
 const SUPPORTED_EXT = new Set([
@@ -9,7 +8,7 @@ const SUPPORTED_EXT = new Set([
   ".dwg", ".dxf", ".txt", ".csv", ".png", ".jpg", ".jpeg",
 ]);
 
-async function syncFromSftp(config) {
+async function syncFromSftp(config, connectionId) {
   let SftpClient;
   try {
     SftpClient = require("ssh2-sftp-client");
@@ -18,9 +17,6 @@ async function syncFromSftp(config) {
   }
 
   const sftp = new SftpClient();
-  const tempDir = path.join(os.tmpdir(), `docsearch-sftp-${Date.now()}`);
-  fs.mkdirSync(tempDir, { recursive: true });
-
   const connectOpts = {
     host: config.host,
     port: Number(config.port) || 22,
@@ -37,47 +33,37 @@ async function syncFromSftp(config) {
   try {
     await sftp.connect(connectOpts);
     const remotePath = config.remotePath || "/";
-    await downloadRecursive(sftp, remotePath, tempDir);
-
+    const remoteFiles = await listRecursive(sftp, remotePath);
     const imported = [];
-    const files = walkLocal(tempDir);
-    for (const file of files) {
-      const doc = await ingestFile(file, {
-        department: store.guessDepartment(file),
+    for (const remoteFile of remoteFiles) {
+      const buffer = await sftp.get(remoteFile.path);
+      if (!Buffer.isBuffer(buffer)) continue;
+      const doc = await ingestBuffer(buffer, remoteFile.name, {
+        department: store.guessDepartment(remoteFile.name),
         folderPath: `sftp://${config.host}${remotePath}`,
         source: "sftp",
+        connectionId,
+        mimeType: "application/octet-stream",
       });
-      imported.push(doc);
+      if (doc) imported.push(doc);
     }
 
     return { imported: imported.length, documents: imported, host: config.host };
   } finally {
     await sftp.end().catch(() => {});
-    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* */ }
   }
 }
 
-async function downloadRecursive(sftp, remoteDir, localDir) {
+async function listRecursive(sftp, remoteDir, files = []) {
   const list = await sftp.list(remoteDir);
   for (const item of list) {
     if (item.name === "." || item.name === "..") continue;
     const remote = `${remoteDir.replace(/\/$/, "")}/${item.name}`;
-    const local = path.join(localDir, item.name);
     if (item.type === "d") {
-      fs.mkdirSync(local, { recursive: true });
-      await downloadRecursive(sftp, remote, local);
+      await listRecursive(sftp, remote, files);
     } else if (SUPPORTED_EXT.has(path.extname(item.name).toLowerCase())) {
-      await sftp.fastGet(remote, local);
+      files.push({ path: remote, name: item.name });
     }
-  }
-}
-
-function walkLocal(dir, files = []) {
-  if (!fs.existsSync(dir)) return files;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkLocal(full, files);
-    else if (SUPPORTED_EXT.has(path.extname(entry.name).toLowerCase())) files.push(full);
   }
   return files;
 }

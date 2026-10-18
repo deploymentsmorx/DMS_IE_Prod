@@ -1,13 +1,26 @@
 const express = require("express");
 const router = express.Router();
 const store = require("../services/relationalStore");
+const { filterAccessibleDocuments } = require("../services/sourceAccessService");
 
-router.get("/", (_req, res) => {
-  res.json({ defects: store.getDefects() });
+function visibleDefects(user) {
+  const visibleIds = new Set(
+    filterAccessibleDocuments(store.getDocuments(), user).map((doc) => String(doc.id))
+  );
+  return store.getDefects().filter(
+    (defect) => !defect.documentId || visibleIds.has(String(defect.documentId))
+  );
+}
+
+router.get("/", (req, res) => {
+  res.json({ defects: visibleDefects(req.user) });
 });
 
-router.get("/analytics", (_req, res) => {
-  res.json(store.getDefectAnalytics());
+router.get("/analytics", (req, res) => {
+  const visibleIds = new Set(
+    filterAccessibleDocuments(store.getDocuments(), req.user).map((doc) => String(doc.id))
+  );
+  res.json(store.getDefectAnalytics(visibleIds));
 });
 
 router.post("/", (req, res) => {

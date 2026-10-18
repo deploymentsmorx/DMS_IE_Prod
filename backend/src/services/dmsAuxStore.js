@@ -1,19 +1,7 @@
-const fs = require("fs");
-const path = require("path");
+let data = { savedSearches: [], notifications: [], nextId: 1 };
 
-const AUX_PATH = path.join(__dirname, "../data/dms-aux.json");
-
-function load() {
-  try {
-    return JSON.parse(fs.readFileSync(AUX_PATH, "utf8"));
-  } catch {
-    return { savedSearches: [], notifications: [], nextId: 1 };
-  }
-}
-
-function save(data) {
-  fs.writeFileSync(AUX_PATH, JSON.stringify(data, null, 2), "utf8");
-}
+function load() { return data; }
+function save(next) { data = next; }
 
 function nextId(data) {
   const id = data.nextId || 1;

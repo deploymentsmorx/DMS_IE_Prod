@@ -58,6 +58,11 @@ app.use(
   })
 );
 app.use(express.json({ limit: "10mb" }));
+app.use(["/api", "/enterprise-api"], (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
 
 const liveClients = new Set();
 
@@ -71,7 +76,14 @@ function broadcastEnterprise(payload) {
 function enterpriseUser(req) {
   const user = authService.validateToken(extractToken(req));
   if (!user) return null;
-  const role = user.role === "user" ? "viewer" : "admin";
+  const dmsRole = String(user.role || "user").toLowerCase().replace(/-/g, "_");
+  const role = ["admin", "superadmin"].includes(dmsRole)
+    ? "admin"
+    : ["manager", "team_lead"].includes(dmsRole)
+      ? "reviewer"
+      : dmsRole === "engineer"
+        ? "editor"
+        : "viewer";
   return {
     id: user.id || user.username,
     name: user.displayName || user.username,
@@ -130,7 +142,7 @@ app.get("/api", (_req, res) => {
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
-    storage: db.isUsingNeon() ? "neondb" : "memory",
+    storage: "memory",
     openai: !!process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || "gpt-4o",
     version: "1.0.0",
@@ -184,7 +196,7 @@ async function start() {
     console.log(`   Modules: Search · Version · Analytics · Governance · Enterprise Suite`);
     console.log(`   Login: superadmin / SuperAdmin@123`);
     console.log(`   API docs       → http://localhost:${PORT}/api`);
-    console.log(`   Storage: ${db.isUsingNeon() ? "Neon PostgreSQL" : "JSON (local)"}`);
+    console.log("   Storage: memory-only document index (account credentials remain local)");
     console.log(`   GPT chat: ${process.env.OPENAI_API_KEY ? "enabled" : "fallback mode (set OPENAI_API_KEY)"}`);
     if (emailService.isEmailConfigured()) {
       console.log(`   OTP email: Gmail/SMTP ready (${process.env.SMTP_USER})`);

@@ -1,7 +1,7 @@
 const db = require("./dbService");
 const store = require("./relationalStore");
 const aux = require("./dmsAuxStore");
-const { filterAccessibleDocuments, buildStats } = require("./sourceAccessService");
+const { filterAccessibleDocuments, filterAccessibleConnections, buildStats } = require("./sourceAccessService");
 const { getSourceType } = require("../config/sourceRegistry");
 
 function mapToSortedEntries(obj, limit = 12) {
@@ -17,11 +17,15 @@ function formatSourceLabel(source) {
   return type?.label || String(source || "unknown").replace(/_/g, " ");
 }
 
-async function buildDashboard() {
-  const connections = store.getConnectedSources();
+async function buildDashboard(user) {
+  const connections = filterAccessibleConnections(store.getConnectedSources(), user);
   const auxCounts = aux.getUsageCounts();
-  const folders = store.getConnectedFolders();
-  const revisionCount = store.getRevisionCount();
+  const folders = filterAccessibleConnections(store.getConnectedFolders(), user);
+  const allDocs = await db.getAllDocuments();
+  const visible = filterAccessibleDocuments(allDocs, user);
+  const visibleIds = visible.map((doc) => String(doc.id));
+  const revisionCount = store.getRevisionCount(visibleIds);
+  const defectCount = store.getDefectAnalytics(visibleIds).total;
 
   if (!connections.length) {
     return {
@@ -36,7 +40,7 @@ async function buildDashboard() {
         savedSearches: auxCounts.savedSearches,
         notifications: auxCounts.notifications,
         unreadNotifications: auxCounts.unreadNotifications,
-        defects: store.getDefectAnalytics().total,
+        defects: defectCount,
       },
       breakdown: {
         bySource: [],
@@ -46,14 +50,12 @@ async function buildDashboard() {
       },
       connections: [],
       recentDocuments: [],
-      storage: db.isUsingNeon() ? "neondb" : "memory",
+      storage: "memory",
       openaiEnabled: !!process.env.OPENAI_API_KEY,
     };
   }
 
-  const allDocs = await db.getAllDocuments();
-  const visible = filterAccessibleDocuments(allDocs);
-  const stats = buildStats(allDocs);
+  const stats = buildStats(allDocs, user);
 
   const recentDocuments = [...visible]
     .sort((a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0))
@@ -92,7 +94,7 @@ async function buildDashboard() {
       savedSearches: auxCounts.savedSearches,
       notifications: auxCounts.notifications,
       unreadNotifications: auxCounts.unreadNotifications,
-      defects: store.getDefectAnalytics().total,
+      defects: defectCount,
     },
     breakdown: {
       bySource: mapToSortedEntries(stats.bySource).map((row) => ({
@@ -105,7 +107,7 @@ async function buildDashboard() {
     },
     connections: connectionRows,
     recentDocuments,
-    storage: db.isUsingNeon() ? "neondb" : "memory",
+    storage: "memory",
     openaiEnabled: !!process.env.OPENAI_API_KEY,
   };
 }

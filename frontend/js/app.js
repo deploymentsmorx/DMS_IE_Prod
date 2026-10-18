@@ -175,8 +175,10 @@ async function render() {
 
     if (!docs.length) {
       const srcLabel = SRC_LABEL[state.source] || state.source;
+      const canManageFolders = window.canManageFolderAccess?.() !== false;
       const needsConnect = state.requiresConnection || !window.hasConnectedSources?.()
         || (state.source !== "all" && window.shouldPromptSourceConnect?.(state.source));
+      const folderAccessNeeded = !canManageFolders && needsConnect;
       const filters = activeFilterLabels();
       const filterHint = filters.length && !needsConnect
         ? `<p style="margin-top:8px">Active filters: <strong>${filters.join(", ")}</strong> — these may hide matches.</p>
@@ -185,15 +187,17 @@ async function render() {
       list.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">${needsConnect ? "🔌" : "🔍"}</div>
-          <h3>${needsConnect ? "Connect a data source first" : state.query ? "No matches for your search" : "No documents found"}</h3>
-          <p>${needsConnect
+          <h3>${folderAccessNeeded ? "No folder access yet" : needsConnect ? "Connect a data source first" : state.query ? "No matches for your search" : "No documents found"}</h3>
+          <p>${folderAccessNeeded
+            ? "Ask an Admin or Super Admin to grant your role or account access to a folder."
+            : needsConnect
             ? "Documents appear only after you connect a source (OneDrive or Local folder). Click <strong>Connect a source</strong> in the sidebar."
             : state.query
               ? `Nothing matched "<strong>${esc(state.query)}</strong>". Try fewer keywords or check spelling.`
               : "Try finance, invoice, inspection, CAD, HR, or connect a folder in Data Sources."}</p>
           ${filterHint}
-          ${needsConnect ? `<button class="btn btn-primary" style="margin-top:12px" type="button" onclick="document.getElementById('sidebarConnectBtn')?.click()">Connect a source</button>` : ""}
-          ${needsConnect && state.source !== "all" ? `<button class="btn btn-sm" style="margin-top:8px;margin-left:8px" type="button" onclick="openConnectModalForSidebar('${state.source}')">Connect ${srcLabel}</button>` : ""}
+          ${needsConnect && canManageFolders ? `<button class="btn btn-primary" style="margin-top:12px" type="button" onclick="document.getElementById('sidebarConnectBtn')?.click()">Connect a source</button>` : ""}
+          ${needsConnect && canManageFolders && state.source !== "all" ? `<button class="btn btn-sm" style="margin-top:8px;margin-left:8px" type="button" onclick="openConnectModalForSidebar('${state.source}')">Connect ${srcLabel}</button>` : ""}
         </div>`;
       return;
     }

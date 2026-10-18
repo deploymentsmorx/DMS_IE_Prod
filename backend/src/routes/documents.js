@@ -3,15 +3,21 @@ const router = express.Router();
 const db = require("../services/dbService");
 const store = require("../services/relationalStore");
 const { searchDocuments, findSimilarDocuments } = require("../services/searchService");
-const { filterAccessibleDocuments, buildStats } = require("../services/sourceAccessService");
+const {
+  filterAccessibleDocuments,
+  filterAccessibleConnections,
+  isDocumentAccessibleForUser,
+  isConnectionAccessible,
+  buildStats,
+} = require("../services/sourceAccessService");
 const { loadEnterpriseDocuments, mergeDocuments } = require("../services/libraryDocuments");
 
 router.get("/", async (req, res) => {
   try {
     const { q, source, fileType, category, department, limit, lang } = req.query;
-    const connections = store.getConnectedSources();
+    const connections = filterAccessibleConnections(store.getConnectedSources(), req.user);
     const connectedDocs = connections.length
-      ? filterAccessibleDocuments(await db.getAllDocuments())
+      ? filterAccessibleDocuments(await db.getAllDocuments(), req.user)
       : [];
     const all = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
     if (!all.length && !connections.length) {
@@ -23,7 +29,7 @@ router.get("/", async (req, res) => {
         connectedSources: 0,
         detectedLang: "en",
         multilingual: false,
-        storage: db.isUsingNeon() ? "neondb" : "memory",
+        storage: "memory",
       });
     }
 
@@ -47,7 +53,7 @@ router.get("/", async (req, res) => {
       connectedSources: connections.length,
       detectedLang: meta.detectedLang || "en",
       multilingual: meta.multilingual || false,
-      storage: db.isUsingNeon() ? "neondb" : "memory",
+      storage: "memory",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -56,9 +62,9 @@ router.get("/", async (req, res) => {
 
 router.get("/stats", async (_req, res) => {
   try {
-    const connections = store.getConnectedSources();
+    const connections = filterAccessibleConnections(store.getConnectedSources(), req.user);
     const connectedDocs = connections.length
-      ? filterAccessibleDocuments(await db.getAllDocuments())
+      ? filterAccessibleDocuments(await db.getAllDocuments(), req.user)
       : [];
     const docs = mergeDocuments(connectedDocs, loadEnterpriseDocuments());
     if (!docs.length && !connections.length) {
@@ -70,25 +76,25 @@ router.get("/stats", async (_req, res) => {
         byDepartment: {},
         requiresConnection: true,
         connectedSources: 0,
-        storage: db.isUsingNeon() ? "neondb" : "memory",
+        storage: "memory",
       });
     }
-    const stats = buildStats(docs);
+    const stats = buildStats(docs, req.user);
 
     res.json({
       ...stats,
       requiresConnection: false,
       connectedSources: connections.length,
-      storage: db.isUsingNeon() ? "neondb" : "memory",
+      storage: "memory",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get("/duplicates", async (_req, res) => {
+router.get("/duplicates", async (req, res) => {
   try {
-    const all = filterAccessibleDocuments(await db.getAllDocuments());
+    const all = filterAccessibleDocuments(await db.getAllDocuments(), req.user);
     const groups = [];
     const seen = new Set();
 
@@ -114,8 +120,8 @@ router.get("/duplicates", async (_req, res) => {
 router.get("/:id/similar", async (req, res) => {
   try {
     const doc = await db.getDocumentById(req.params.id);
-    if (!doc) return res.status(404).json({ error: "Not found" });
-    const all = filterAccessibleDocuments(await db.getAllDocuments());
+    if (!doc || !isDocumentAccessibleForUser(doc, req.user)) return res.status(404).json({ error: "Not found" });
+    const all = filterAccessibleDocuments(await db.getAllDocuments(), req.user);
     const similar = findSimilarDocuments(doc, all, Number(req.query.limit) || 5);
     res.json({ documentId: doc.id, title: doc.title, similar, total: similar.length });
   } catch (err) {
@@ -126,7 +132,7 @@ router.get("/:id/similar", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const doc = await db.getDocumentById(req.params.id);
-    if (!doc) return res.status(404).json({ error: "Not found" });
+    if (!doc || !isDocumentAccessibleForUser(doc, req.user)) return res.status(404).json({ error: "Not found" });
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -139,6 +145,10 @@ router.post("/", async (req, res) => {
     if (!title || !url) {
       return res.status(400).json({ error: "title and url are required" });
     }
+    if (req.body.connectionId) {
+      const connection = store.getConnectedSource(req.body.connectionId);
+      if (!isConnectionAccessible(connection, req.user)) return res.status(404).json({ error: "Folder not found" });
+    }
     const doc = await db.insertDocument(req.body);
     res.status(201).json(doc);
   } catch (err) {
@@ -148,6 +158,12 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
+    const existing = await db.getDocumentById(req.params.id);
+    if (!existing || !isDocumentAccessibleForUser(existing, req.user)) return res.status(404).json({ error: "Not found" });
+    if (req.body.connectionId && String(req.body.connectionId) !== String(existing.connectionId || "")) {
+      const connection = store.getConnectedSource(req.body.connectionId);
+      if (!isConnectionAccessible(connection, req.user)) return res.status(404).json({ error: "Folder not found" });
+    }
     const doc = await db.updateDocument(req.params.id, req.body);
     if (!doc) return res.status(404).json({ error: "Not found" });
     res.json(doc);
@@ -158,6 +174,8 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    const existing = await db.getDocumentById(req.params.id);
+    if (!existing || !isDocumentAccessibleForUser(existing, req.user)) return res.status(404).json({ error: "Not found" });
     const ok = await db.deleteDocument(req.params.id);
     if (!ok) return res.status(404).json({ error: "Not found" });
     res.json({ success: true });

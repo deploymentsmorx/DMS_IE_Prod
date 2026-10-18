@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const store = require("../services/relationalStore");
+const { filterAccessibleDocuments, filterAccessibleGraph } = require("../services/sourceAccessService");
 
-router.get("/", (_req, res) => {
-  res.json(store.getGraph());
+router.get("/", (req, res) => {
+  const docs = filterAccessibleDocuments(store.getDocuments(), req.user);
+  res.json(filterAccessibleGraph(store.getGraph(), docs));
 });
 
 router.post("/edges", (req, res) => {

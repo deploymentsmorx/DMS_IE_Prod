@@ -8,9 +8,16 @@ export function isDmsSuperAdmin(user = getCurrentUser()) {
   return role === "superadmin" || role === "super_admin" || username === "superadmin";
 }
 
-/** Show/hide Super Admin entry points in the DMS shell. */
+/** True when the signed-in account can administer its team's DMS access. */
+export function isDmsAdmin(user = getCurrentUser()) {
+  if (!user) return false;
+  const role = String(user.role || "").toLowerCase();
+  return role === "admin" || isDmsSuperAdmin(user);
+}
+
+/** Show administration entry points to Admins and Super Admins. */
 export function syncSuperAdminUi(user = getCurrentUser()) {
-  const ok = isDmsSuperAdmin(user);
+  const ok = isDmsAdmin(user);
   const adminGroup = document.getElementById("adminSidebarGroup");
   const usersModuleBtn = document.getElementById("dmsUsersModuleBtn");
   const usersNav = document.getElementById("settingsUsersNav");
@@ -21,4 +28,5 @@ export function syncSuperAdminUi(user = getCurrentUser()) {
 }
 
 window.isDmsSuperAdmin = isDmsSuperAdmin;
+window.isDmsAdmin = isDmsAdmin;
 window.syncSuperAdminUi = syncSuperAdminUi;

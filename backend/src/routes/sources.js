@@ -1,25 +1,37 @@
 const express = require("express");
 const multer = require("multer");
-const path = require("path");
 const router = express.Router();
 const sourceService = require("../services/sourceService");
 const sourceOtpService = require("../services/sourceOtpService");
 const googleOAuth = require("../services/googleOAuthService");
 const store = require("../services/relationalStore");
+const authService = require("../services/authService");
+const { requireRole } = require("../middleware/auth");
+const requireFolderAdmin = requireRole("admin", "superadmin");
+
+function roleLabel(role) {
+  return String(role || "user")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function cleanAccessControl(body = {}, actor) {
+  const allUsers = authService.getUsersForAdmin(actor)
+    .filter((user) => !["admin", "superadmin"].includes(user.role));
+  const validRoles = new Set(allUsers.map((user) => user.role));
+  const usersById = new Map(allUsers.map((user) => [String(user.id), user]));
+  const allowedRoles = Array.isArray(body.allowedRoles)
+    ? [...new Set(body.allowedRoles.map((role) => authService.normalizeRole(role)).filter((role) => validRoles.has(role)))]
+    : [];
+  const allowedUsers = Array.isArray(body.allowedUsers)
+    ? [...new Set(body.allowedUsers.map((id) => String(id)))].filter((id) => usersById.has(id))
+    : [];
+  return { locked: body.locked === true, allowedRoles, allowedUsers };
+}
 
 const localUpload = multer({
-  storage: multer.diskStorage({
-    destination(_req, _file, cb) {
-      const dir = path.join(store.ensureUploadsDir(), "local-browser");
-      require("fs").mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename(_req, file, cb) {
-      const safe = (file.originalname || "file").replace(/[/\\]/g, "_");
-      cb(null, `${Date.now()}-${safe}`);
-    },
-  }),
-  limits: { fileSize: 50 * 1024 * 1024, files: 500 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 20 },
 });
 
 router.get("/types", (_req, res) => {
@@ -34,14 +46,39 @@ router.get("/types", (_req, res) => {
   });
 });
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
   res.json({
-    connections: sourceService.getConnections(),
-    stats: sourceService.getSourceStats(),
+    connections: sourceService.getConnections(req.user),
+    stats: sourceService.getSourceStats(req.user),
   });
 });
 
-router.get("/google/auth-url", (_req, res) => {
+router.get("/access-options", requireFolderAdmin, (req, res) => {
+  const users = authService.getUsersForAdmin(req.user)
+    .filter((user) => !["admin", "superadmin"].includes(user.role));
+  const roles = [...new Set(users.map((user) => user.role))]
+    .map((value) => ({ value, label: roleLabel(value) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  res.json({
+    roles,
+    users: users.map(({ id, username, displayName, role }) => ({
+      id,
+      username,
+      displayName,
+      role,
+    })),
+  });
+});
+
+router.patch("/:id/access-control", requireFolderAdmin, (req, res) => {
+  const connection = store.getConnectedSource(req.params.id);
+  if (!connection) return res.status(404).json({ error: "Connected folder not found" });
+  const accessControl = cleanAccessControl(req.body || {}, req.user);
+  const updated = store.updateConnectedSource(connection.id, { accessControl });
+  res.json({ success: true, accessControl: updated.accessControl });
+});
+
+router.get("/google/auth-url", requireFolderAdmin, (_req, res) => {
   try {
     if (!googleOAuth.isConfigured()) {
       return res.status(400).json({
@@ -55,7 +92,7 @@ router.get("/google/auth-url", (_req, res) => {
   }
 });
 
-router.post("/google/resend-otp", async (req, res) => {
+router.post("/google/resend-otp", requireFolderAdmin, async (req, res) => {
   try {
     const { sessionId } = req.body;
     if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
@@ -66,7 +103,7 @@ router.post("/google/resend-otp", async (req, res) => {
   }
 });
 
-router.post("/send-otp", async (req, res) => {
+router.post("/send-otp", requireFolderAdmin, async (req, res) => {
   try {
     const { email, type } = req.body;
     const result = await sourceOtpService.sendOtpForSession({
@@ -80,7 +117,7 @@ router.post("/send-otp", async (req, res) => {
   }
 });
 
-router.post("/connect/google", async (req, res) => {
+router.post("/connect/google", requireFolderAdmin, async (req, res) => {
   try {
     const { sessionId, otp } = req.body;
     if (!sessionId || !otp) {
@@ -108,7 +145,7 @@ router.post("/connect/google", async (req, res) => {
   }
 });
 
-router.post("/connect", async (req, res) => {
+router.post("/connect", requireFolderAdmin, async (req, res) => {
   try {
     const { type, config, label } = req.body;
     if (!type) return res.status(400).json({ error: "type is required" });
@@ -141,7 +178,7 @@ router.post("/connect", async (req, res) => {
   }
 });
 
-router.post("/connect/local-folder", localUpload.array("files", 500), async (req, res) => {
+router.post("/connect/local-folder", requireFolderAdmin, localUpload.array("files", 20), async (req, res) => {
   try {
     const config = {
       department: req.body.department || "auto",
@@ -158,7 +195,7 @@ router.post("/connect/local-folder", localUpload.array("files", 500), async (req
   }
 });
 
-router.post("/:id/local-folder-sync", localUpload.array("files", 500), async (req, res) => {
+router.post("/:id/local-folder-sync", requireFolderAdmin, localUpload.array("files", 20), async (req, res) => {
   try {
     const result = await sourceService.syncLocalFolderUpload(req.params.id, req.files || []);
     res.json({ success: true, ...result });
@@ -167,7 +204,7 @@ router.post("/:id/local-folder-sync", localUpload.array("files", 500), async (re
   }
 });
 
-router.post("/disconnect-all", (_req, res) => {
+router.post("/disconnect-all", requireFolderAdmin, (_req, res) => {
   try {
     const result = sourceService.disconnectAll();
     res.json({ success: true, ...result });
@@ -176,7 +213,7 @@ router.post("/disconnect-all", (_req, res) => {
   }
 });
 
-router.post("/:id/sync", async (req, res) => {
+router.post("/:id/sync", requireFolderAdmin, async (req, res) => {
   try {
     const result = await sourceService.syncConnection(req.params.id);
     res.json({ success: true, ...result });
@@ -185,7 +222,7 @@ router.post("/:id/sync", async (req, res) => {
   }
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", requireFolderAdmin, (req, res) => {
   try {
     const ok = sourceService.disconnect(req.params.id);
     if (!ok) return res.status(404).json({ error: "Not found" });
@@ -195,7 +232,7 @@ router.delete("/:id", (req, res) => {
   }
 });
 
-router.post("/sync-all", async (_req, res) => {
+router.post("/sync-all", requireFolderAdmin, async (_req, res) => {
   try {
     const results = await sourceService.syncAll();
     res.json({ success: true, results });

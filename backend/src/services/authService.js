@@ -16,6 +16,14 @@ function hashPassword(password) {
     .digest("hex");
 }
 
+function normalizeRole(role, fallback = "user") {
+  const normalized = String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(normalized) ? normalized : fallback;
+}
+
 function builtinUsers() {
   return [
     {
@@ -138,11 +146,18 @@ function verifyCredentials(username, password) {
   return { ok: true, user: sanitizeUser(user) };
 }
 
-function createUser({ username, displayName, role, password }) {
+function createUser({ username, displayName, role, password }, actor) {
   const name = String(username || "").trim().toLowerCase();
   const label = String(displayName || "").trim() || name;
-  const userRole = ["superadmin", "admin", "user"].includes(role) ? role : "user";
+  const userRole = normalizeRole(role);
   const tempPassword = String(password || "").trim();
+
+  if (!isAdmin(actor)) {
+    return { ok: false, error: "Admin access required to create accounts" };
+  }
+  if (userRole === "superadmin" || (userRole === "admin" && !isSuperAdmin(actor))) {
+    return { ok: false, error: "Only a Super Admin can create Admin accounts" };
+  }
 
   if (!name || name.length < 2) {
     return { ok: false, error: "Username must be at least 2 characters" };
@@ -165,6 +180,7 @@ function createUser({ username, displayName, role, password }) {
     role: userRole,
     passwordHash: hashPassword(tempPassword),
     builtIn: false,
+    customerId: actor.customerId || "",
     createdAt: new Date().toISOString(),
   };
   custom.push(user);
@@ -177,10 +193,35 @@ function createUser({ username, displayName, role, password }) {
   };
 }
 
-function deleteUser(userId) {
+function canManageUser(actor, target) {
+  if (!isAdmin(actor) || !target) return false;
+  if (isSuperAdmin(actor)) return true;
+  if (target.builtIn || String(target.id) === String(actor.id)) return false;
+  if (["admin", "superadmin"].includes(target.role)) return false;
+  return String(target.customerId || "") === String(actor.customerId || "");
+}
+
+function getUsersForAdmin(actor) {
+  const users = getUsers();
+  if (isSuperAdmin(actor)) return users.map(sanitizeUser);
+  if (!isAdmin(actor)) return [];
+  return users
+    .filter((user) =>
+      String(user.customerId || "") === String(actor.customerId || "") &&
+      !user.builtIn &&
+      (!(["admin", "superadmin"].includes(user.role)) || String(user.id) === String(actor.id))
+    )
+    .map(sanitizeUser);
+}
+
+function deleteUser(userId, actor) {
   const id = String(userId || "");
   if (builtinUsers().some((u) => u.id === id)) {
     return { ok: false, error: "Built-in accounts cannot be deleted" };
+  }
+  const target = getUsers().find((user) => String(user.id) === id);
+  if (!canManageUser(actor, target)) {
+    return { ok: false, error: "You do not have permission to remove this account" };
   }
   const custom = loadCustomUsers();
   const next = custom.filter((u) => u.id !== id);
@@ -203,7 +244,7 @@ function upsertEngineerUser(fields = {}) {
     id: fields.id || `e_${crypto.randomBytes(6).toString("hex")}`,
     username,
     displayName: String(fields.displayName || username).trim(),
-    role: ["superadmin", "admin", "user"].includes(fields.role) ? fields.role : "user",
+    role: normalizeRole(fields.role),
     passwordHash: fields.passwordHash,
     builtIn: false,
     kind: "engineer",
@@ -251,7 +292,12 @@ function validateToken(token) {
   try {
     const payload = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
     if (!payload.exp || Date.now() > payload.exp) return null;
-    return sanitizeUser(payload);
+    const currentUser = getUsers().find((user) =>
+      payload.id
+        ? String(user.id) === String(payload.id)
+        : String(user.username || "").toLowerCase() === String(payload.username || "").toLowerCase()
+    );
+    return currentUser ? sanitizeUser(currentUser) : null;
   } catch {
     return null;
   }
@@ -298,6 +344,9 @@ module.exports = {
   canDelete,
   canGovern,
   getRolePermissions,
+  normalizeRole,
   getUsers: () => getUsers().map(sanitizeUser),
+  getUsersForAdmin,
+  canManageUser,
   findRawUser,
 };

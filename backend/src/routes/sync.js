@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../services/dbService");
+const { requireRole } = require("../middleware/auth");
+const requireFolderAdmin = requireRole("admin", "superadmin");
 
-router.post("/", async (_req, res) => {
+router.post("/", requireFolderAdmin, async (_req, res) => {
   try {
     const synced = [];
 

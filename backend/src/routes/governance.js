@@ -48,9 +48,9 @@ router.post("/retention", (req, res) => {
   res.status(201).json(gov.addRetentionRule(req.body));
 });
 
-router.post("/retention/scan", async (_req, res) => {
+router.post("/retention/scan", async (req, res) => {
   try {
-    const docs = filterAccessibleDocuments(await db.getAllDocuments());
+    const docs = filterAccessibleDocuments(await db.getAllDocuments(), req.user);
     const scan = gov.scanRetention(docs);
     const executed = [];
     for (const row of scan.results || []) {

@@ -34,18 +34,18 @@ router.get("/me", requireAuth, (req, res) => {
 });
 
 router.get("/users", requireAuth, (req, res) => {
-  if (!authService.isSuperAdmin(req.user)) {
-    return res.status(403).json({ error: "Super Admin access required" });
+  if (!authService.isAdmin(req.user)) {
+    return res.status(403).json({ error: "Admin access required" });
   }
-  res.json({ users: authService.getUsers() });
+  res.json({ users: authService.getUsersForAdmin(req.user) });
 });
 
 router.post("/users", requireAuth, (req, res) => {
-  if (!authService.isSuperAdmin(req.user)) {
-    return res.status(403).json({ error: "Super Admin access required" });
+  if (!authService.isAdmin(req.user)) {
+    return res.status(403).json({ error: "Admin access required" });
   }
   const { username, displayName, role, password } = req.body || {};
-  const result = authService.createUser({ username, displayName, role, password });
+  const result = authService.createUser({ username, displayName, role, password }, req.user);
   if (!result.ok) return res.status(400).json({ error: result.error });
   res.status(201).json({
     user: result.user,
@@ -55,10 +55,10 @@ router.post("/users", requireAuth, (req, res) => {
 });
 
 router.delete("/users/:id", requireAuth, (req, res) => {
-  if (!authService.isSuperAdmin(req.user)) {
-    return res.status(403).json({ error: "Super Admin access required" });
+  if (!authService.isAdmin(req.user)) {
+    return res.status(403).json({ error: "Admin access required" });
   }
-  const result = authService.deleteUser(req.params.id);
+  const result = authService.deleteUser(req.params.id, req.user);
   if (!result.ok) return res.status(400).json({ error: result.error });
   res.json({ success: true });
 });

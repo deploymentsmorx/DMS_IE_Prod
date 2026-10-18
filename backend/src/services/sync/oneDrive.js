@@ -111,7 +111,7 @@ async function syncOneDriveGraph(userEmail) {
   return listGraphDriveItems(token, userEmail);
 }
 
-async function scanOneDrivePath(folderPath, deptDefault) {
+async function scanOneDrivePath(folderPath, deptDefault, connectionId) {
   const resolved = path.resolve(folderPath);
   const dept =
     deptDefault && deptDefault !== "auto" ? deptDefault : store.guessDepartment(resolved);
@@ -127,6 +127,9 @@ async function scanOneDrivePath(folderPath, deptDefault) {
       department: store.guessDepartment(file) !== "other" ? store.guessDepartment(file) : dept,
       folderPath: resolved,
       source: "onedrive",
+      connectionId,
+      keepInPlace: true,
+      localOnly: true,
     });
     imported.push(doc);
   }
@@ -157,7 +160,7 @@ async function syncOneDriveLocal(config = {}) {
 
   for (const folderPath of paths) {
     try {
-      const result = await scanOneDrivePath(folderPath, dept);
+      const result = await scanOneDrivePath(folderPath, dept, config.connectionId);
       allImported.push(...result.imported);
       scanned.push({ path: result.resolved, files: result.files, imported: result.imported.length });
     } catch (err) {

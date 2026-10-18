@@ -1,7 +1,6 @@
-const fs = require("fs");
 const path = require("path");
-const os = require("os");
-const { ingestFile } = require("../folderService");
+const { PassThrough } = require("stream");
+const { ingestBuffer } = require("../folderService");
 const store = require("../relationalStore");
 
 const SUPPORTED_EXT = new Set([
@@ -9,7 +8,14 @@ const SUPPORTED_EXT = new Set([
   ".dwg", ".dxf", ".txt", ".csv", ".png", ".jpg", ".jpeg",
 ]);
 
-async function syncFromFtp(config) {
+function downloadBuffer(client, remotePath) {
+  const chunks = [];
+  const output = new PassThrough();
+  output.on("data", (chunk) => chunks.push(chunk));
+  return client.downloadTo(output, remotePath).then(() => Buffer.concat(chunks));
+}
+
+async function syncFromFtp(config, connectionId) {
   let Client;
   try {
     Client = require("basic-ftp").Client;
@@ -18,9 +24,6 @@ async function syncFromFtp(config) {
   }
 
   const client = new Client();
-  const tempDir = path.join(os.tmpdir(), `docsearch-ftp-${Date.now()}`);
-  fs.mkdirSync(tempDir, { recursive: true });
-
   try {
     await client.access({
       host: config.host,
@@ -31,46 +34,35 @@ async function syncFromFtp(config) {
     });
 
     const remotePath = config.remotePath || "/";
-    await downloadRecursive(client, remotePath, tempDir);
-
+    const remoteFiles = await listRecursive(client, remotePath);
     const imported = [];
-    const files = walkLocal(tempDir);
-    for (const file of files) {
-      const doc = await ingestFile(file, {
-        department: store.guessDepartment(file),
+    for (const remoteFile of remoteFiles) {
+      const buffer = await downloadBuffer(client, remoteFile.path);
+      const doc = await ingestBuffer(buffer, remoteFile.name, {
+        department: store.guessDepartment(remoteFile.name),
         folderPath: `ftp://${config.host}${remotePath}`,
         source: "ftp",
+        connectionId,
+        mimeType: "application/octet-stream",
       });
-      imported.push(doc);
+      if (doc) imported.push(doc);
     }
 
     return { imported: imported.length, documents: imported, host: config.host };
   } finally {
     client.close();
-    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* */ }
   }
 }
 
-async function downloadRecursive(client, remoteDir, localDir) {
+async function listRecursive(client, remoteDir, files = []) {
   const list = await client.list(remoteDir);
   for (const item of list) {
     const remote = remoteDir.endsWith("/") ? `${remoteDir}${item.name}` : `${remoteDir}/${item.name}`;
-    const local = path.join(localDir, item.name);
     if (item.isDirectory) {
-      fs.mkdirSync(local, { recursive: true });
-      await downloadRecursive(client, remote, local);
+      await listRecursive(client, remote, files);
     } else if (SUPPORTED_EXT.has(path.extname(item.name).toLowerCase())) {
-      await client.downloadTo(local, remote);
+      files.push({ path: remote, name: item.name });
     }
-  }
-}
-
-function walkLocal(dir, files = []) {
-  if (!fs.existsSync(dir)) return files;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkLocal(full, files);
-    else if (SUPPORTED_EXT.has(path.extname(entry.name).toLowerCase())) files.push(full);
   }
   return files;
 }

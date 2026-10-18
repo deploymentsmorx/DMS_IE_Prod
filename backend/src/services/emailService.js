@@ -1,8 +1,4 @@
 const nodemailer = require("nodemailer");
-const fs = require("fs");
-const path = require("path");
-
-const OUTBOX_DIR = path.join(__dirname, "../data/otp-outbox");
 
 let transporter = null;
 
@@ -32,16 +28,6 @@ async function getTransporter() {
     },
   });
   return transporter;
-}
-
-function writeOutbox(email, code, sourceLabel) {
-  if (!fs.existsSync(OUTBOX_DIR)) fs.mkdirSync(OUTBOX_DIR, { recursive: true });
-  const file = path.join(OUTBOX_DIR, `${Date.now()}-${email.replace(/[^a-z0-9]/gi, "_")}.txt`);
-  fs.writeFileSync(
-    file,
-    `To: ${email}\nSource: ${sourceLabel}\nCode: ${code}\nSent: ${new Date().toISOString()}\n`,
-    "utf8"
-  );
 }
 
 async function sendOtpEmail(to, code, sourceLabel) {
@@ -77,7 +63,6 @@ async function sendOtpEmail(to, code, sourceLabel) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   await transport.sendMail({ from, to: email, subject, text, html });
 
-  writeOutbox(email, code, sourceLabel);
   return { sent: true, smtpConfigured: true, to: email };
 }
 

@@ -1,6 +1,6 @@
 const { searchDocuments } = require("./searchService");
 const store = require("./relationalStore");
-const { filterAccessibleDocuments } = require("./sourceAccessService");
+const { filterAccessibleDocuments, filterAccessibleGraph } = require("./sourceAccessService");
 
 let openai = null;
 
@@ -14,13 +14,14 @@ function getOpenAI() {
 }
 
 const TOOLS = {
-  search_documents(query, filters = {}) {
-    const docs = filterAccessibleDocuments(store.getDocuments());
+  search_documents(query, filters = {}, user) {
+    const docs = filterAccessibleDocuments(store.getDocuments(), user);
     return searchDocuments(docs, { q: query, ...filters, limit: 10 });
   },
 
-  query_knowledge_graph(entity) {
-    const graph = store.getGraph();
+  query_knowledge_graph(entity, user) {
+    const visibleDocs = filterAccessibleDocuments(store.getDocuments(), user);
+    const graph = filterAccessibleGraph(store.getGraph(), visibleDocs);
     const q = (entity || "").toLowerCase();
     const nodes = graph.nodes.filter((n) => n.label.toLowerCase().includes(q));
     const nodeIds = new Set(nodes.map((n) => n.id));
@@ -28,8 +29,13 @@ const TOOLS = {
     return { nodes: nodes.slice(0, 15), edges: edges.slice(0, 20) };
   },
 
-  get_defects(filter = {}) {
-    let defects = store.getDefects();
+  get_defects(filter = {}, user) {
+    const visibleDocIds = new Set(
+      filterAccessibleDocuments(store.getDocuments(), user).map((doc) => String(doc.id))
+    );
+    let defects = store.getDefects().filter(
+      (defect) => !defect.documentId || visibleDocIds.has(String(defect.documentId))
+    );
     if (filter.severity) defects = defects.filter((d) => d.severity === filter.severity);
     if (filter.status) defects = defects.filter((d) => d.status === filter.status);
     if (filter.project) {
@@ -43,8 +49,8 @@ const TOOLS = {
     return store.getRevisions(docId);
   },
 
-  list_departments() {
-    const docs = store.getDocuments();
+  list_departments(user) {
+    const docs = filterAccessibleDocuments(store.getDocuments(), user);
     const counts = {};
     for (const d of docs) {
       counts[d.department] = (counts[d.department] || 0) + 1;
@@ -53,12 +59,11 @@ const TOOLS = {
   },
 };
 
-async function agenticSearch(query) {
+async function agenticSearch(query, user) {
   const steps = [];
-  const allDocs = store.getDocuments();
 
   steps.push({ step: 1, action: "search_documents", input: query });
-  const searchResults = TOOLS.search_documents(query);
+  const searchResults = TOOLS.search_documents(query, {}, user);
   steps.push({ step: 1, action: "search_documents", resultCount: searchResults.length });
 
   const dept = store.guessDepartment(query);
@@ -67,12 +72,12 @@ async function agenticSearch(query) {
   }
 
   steps.push({ step: 3, action: "query_knowledge_graph", input: query });
-  const graph = TOOLS.query_knowledge_graph(query);
+  const graph = TOOLS.query_knowledge_graph(query, user);
 
   let defects = [];
   if (/defect|corrosion|leak|failure|damage|issue/i.test(query)) {
     steps.push({ step: 4, action: "get_defects", input: query });
-    defects = TOOLS.get_defects({ project: query });
+    defects = TOOLS.get_defects({ project: query }, user);
   }
 
   const client = getOpenAI();
@@ -87,7 +92,7 @@ async function agenticSearch(query) {
     })),
     graphNodes: graph.nodes.slice(0, 5).map((n) => n.label),
     defects: defects.map((d) => ({ title: d.title, severity: d.severity, project: d.project })),
-    departments: TOOLS.list_departments(),
+    departments: TOOLS.list_departments(user),
   };
 
   if (client) {

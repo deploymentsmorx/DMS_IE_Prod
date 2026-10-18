@@ -1,9 +1,7 @@
 const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
 const authService = require("./authService");
 
-const CUSTOMERS_PATH = path.join(__dirname, "../data/customers.json");
+let volatileStore = { customers: [] };
 
 function getSecret() {
   return process.env.AUTH_SECRET || "smorx-advance-search-dev-secret";
@@ -17,21 +15,11 @@ function hashPassword(password) {
 }
 
 function loadStore() {
-  try {
-    if (!fs.existsSync(CUSTOMERS_PATH)) return { customers: [] };
-    const raw = JSON.parse(fs.readFileSync(CUSTOMERS_PATH, "utf8"));
-    return {
-      customers: Array.isArray(raw?.customers) ? raw.customers : Array.isArray(raw) ? raw : [],
-    };
-  } catch {
-    return { customers: [] };
-  }
+  return volatileStore;
 }
 
 function saveStore(store) {
-  const dir = path.dirname(CUSTOMERS_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CUSTOMERS_PATH, JSON.stringify({ customers: store.customers || [] }, null, 2));
+  volatileStore = { customers: [...(store.customers || [])] };
 }
 
 function generateLicenseKey(existingKeys) {
@@ -111,10 +99,10 @@ function createCustomer(payload = {}) {
       : payload.grant_full_access !== undefined
         ? Boolean(payload.grant_full_access)
         : true;
-  let role = String(payload.role || "").trim();
-  if (!["superadmin", "admin", "user"].includes(role)) {
-    role = grantFullAccess ? "admin" : "user";
-  }
+  const role = authService.normalizeRole(
+    payload.role,
+    grantFullAccess ? "admin" : "user"
+  );
 
   if (!engineerName || !engineerEmail || temporaryPassword.length < 6) {
     return {

@@ -1,5 +1,6 @@
 const store = require("./relationalStore");
 const { searchDocuments } = require("./searchService");
+const { filterAccessibleDocuments, filterAccessibleGraph } = require("./sourceAccessService");
 
 let openai = null;
 
@@ -12,17 +13,27 @@ function getOpenAI() {
   return openai;
 }
 
-function findRelatedChain(issue) {
+function getAccessibleDefects(user) {
+  const visibleIds = new Set(
+    filterAccessibleDocuments(store.getDocuments(), user).map((doc) => String(doc.id))
+  );
+  return store.getDefects().filter(
+    (defect) => !defect.documentId || visibleIds.has(String(defect.documentId))
+  );
+}
+
+function findRelatedChain(issue, user) {
   const q = issue.toLowerCase();
-  const docs = searchDocuments(store.getDocuments(), { q: issue, limit: 8 });
-  const defects = store.getDefects().filter(
+  const visibleDocs = filterAccessibleDocuments(store.getDocuments(), user);
+  const docs = searchDocuments(visibleDocs, { q: issue, limit: 8 });
+  const defects = getAccessibleDefects(user).filter(
     (d) =>
       d.title.toLowerCase().includes(q) ||
       d.description.toLowerCase().includes(q) ||
       (d.project || "").toLowerCase().includes(q)
   );
 
-  const graph = store.getGraph();
+  const graph = filterAccessibleGraph(store.getGraph(), visibleDocs);
   const relatedNodes = graph.nodes.filter((n) => n.label.toLowerCase().includes(q));
   const nodeIds = new Set(relatedNodes.map((n) => n.id));
   for (const d of docs) nodeIds.add(`doc-${d.id}`);
@@ -50,14 +61,15 @@ function findRelatedChain(issue) {
   return { docs, defects, relatedNodes, edges, timeline };
 }
 
-async function analyzeRootCause(issue, defectId) {
+async function analyzeRootCause(issue, defectId, user) {
   let targetIssue = issue;
   if (defectId) {
-    const defect = store.getDefects().find((d) => String(d.id) === String(defectId));
+    const defect = getAccessibleDefects(user).find((d) => String(d.id) === String(defectId));
+    if (!defect) throw new Error("Defect not found");
     if (defect) targetIssue = `${defect.title} — ${defect.description}`;
   }
 
-  const chain = findRelatedChain(targetIssue);
+  const chain = findRelatedChain(targetIssue, user);
   const client = getOpenAI();
 
   const evidence = {
